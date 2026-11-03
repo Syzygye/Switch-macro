@@ -43,12 +43,15 @@
 #define MACRO_FILENAME_MAX 32U
 #define MACRO_BASENAME_MAX 27U
 #define MACRO_MAX_FILES 24U
+#define MACRO_LIST_VISIBLE 4
 #define MACRO_FILE_MAX_BYTES 24576U
 #define MACRO_MAX_STEPS 512U
 #define MACRO_MAX_STEP_MS 60000U
 #define LIVE_QUEUE_DEPTH 1U
 #define LIVE_FRAME_MAGIC 0xC7U
 #define LIVE_FRAME_SIZE 9U
+#define SIMULATOR_NO_CONTROL 0xFFU
+#define SIMULATOR_STICK_STEP 48U
 #define LIVE_RECORD_HEADER "# Recorded on Flipper Zero\n# STATE controls duration_ms\n"
 
 typedef struct __attribute__((packed)) {
@@ -76,14 +79,92 @@ typedef enum {
 typedef enum {
     MacroUiHome,
     MacroUiList,
+    MacroUiDetails,
     MacroUiActions,
     MacroUiRename,
     MacroUiDeleteConfirm,
+    MacroUiSimulator,
 } MacroUiScreen;
+
+typedef enum {
+    LiveUiMenu,
+    LiveUiRecorder,
+    LiveUiController,
+} LiveUiScreen;
+
+typedef enum {
+    RenameKeyCharacter,
+    RenameKeyBackspace,
+    RenameKeySymbols,
+    RenameKeySpace,
+    RenameKeySave,
+} RenameKeyAction;
+
+typedef struct {
+    char value;
+    uint8_t x;
+    uint8_t width;
+    RenameKeyAction action;
+} RenameKey;
 
 typedef struct {
     char name[MACRO_FILENAME_MAX];
 } MacroFile;
+
+typedef enum {
+    SimulatorControlL,
+    SimulatorControlZL,
+    SimulatorControlHome,
+    SimulatorControlZR,
+    SimulatorControlR,
+    SimulatorControlLeftStick,
+    SimulatorControlL3,
+    SimulatorControlDpadUp,
+    SimulatorControlDpadLeft,
+    SimulatorControlDpadDown,
+    SimulatorControlDpadRight,
+    SimulatorControlMinus,
+    SimulatorControlCapture,
+    SimulatorControlPlus,
+    SimulatorControlRightStick,
+    SimulatorControlR3,
+    SimulatorControlX,
+    SimulatorControlY,
+    SimulatorControlA,
+    SimulatorControlB,
+    SimulatorControlCount,
+} SimulatorControlId;
+
+typedef struct {
+    const char* name;
+    uint16_t button;
+    uint8_t hat;
+    uint8_t x;
+    uint8_t y;
+} SimulatorControl;
+
+static const SimulatorControl simulator_controls[SimulatorControlCount] = {
+    [SimulatorControlL] = {"L", SWITCH_BUTTON_L, SWITCH_HAT_NONE, 26U, 9U},
+    [SimulatorControlZL] = {"ZL", SWITCH_BUTTON_ZL, SWITCH_HAT_NONE, 45U, 9U},
+    [SimulatorControlHome] = {"HOME", SWITCH_BUTTON_HOME, SWITCH_HAT_NONE, 64U, 15U},
+    [SimulatorControlZR] = {"ZR", SWITCH_BUTTON_ZR, SWITCH_HAT_NONE, 83U, 9U},
+    [SimulatorControlR] = {"R", SWITCH_BUTTON_R, SWITCH_HAT_NONE, 101U, 9U},
+    [SimulatorControlLeftStick] = {"L STICK", 0U, SWITCH_HAT_NONE, 27U, 23U},
+    [SimulatorControlL3] = {"L3", SWITCH_BUTTON_L3, SWITCH_HAT_NONE, 41U, 23U},
+    [SimulatorControlDpadUp] = {"UP", 0U, 0U, 43U, 30U},
+    [SimulatorControlDpadLeft] = {"LEFT", 0U, 6U, 35U, 37U},
+    [SimulatorControlDpadDown] = {"DOWN", 0U, 4U, 43U, 45U},
+    [SimulatorControlDpadRight] = {"RIGHT", 0U, 2U, 51U, 37U},
+    [SimulatorControlMinus] = {"MINUS", SWITCH_BUTTON_MINUS, SWITCH_HAT_NONE, 57U, 23U},
+    [SimulatorControlCapture] = {"CAPTURE", SWITCH_BUTTON_CAPTURE, SWITCH_HAT_NONE, 64U, 30U},
+    [SimulatorControlPlus] = {"PLUS", SWITCH_BUTTON_PLUS, SWITCH_HAT_NONE, 72U, 23U},
+    [SimulatorControlRightStick] = {"R STICK", 0U, SWITCH_HAT_NONE, 82U, 37U},
+    [SimulatorControlR3] = {"R3", SWITCH_BUTTON_R3, SWITCH_HAT_NONE, 95U, 48U},
+    [SimulatorControlX] = {"X", SWITCH_BUTTON_X, SWITCH_HAT_NONE, 109U, 22U},
+    [SimulatorControlY] = {"Y", SWITCH_BUTTON_Y, SWITCH_HAT_NONE, 99U, 33U},
+    [SimulatorControlA] = {"A", SWITCH_BUTTON_A, SWITCH_HAT_NONE, 119U, 33U},
+    [SimulatorControlB] = {"B", SWITCH_BUTTON_B, SWITCH_HAT_NONE, 109U, 44U},
+};
 
 typedef enum {
     MacroLoadOk,
@@ -128,13 +209,21 @@ typedef struct {
     usbd_device* usb_dev;
     volatile bool connected;
     volatile bool configured;
+    volatile bool controller_wake_pending;
     volatile bool stop_requested;
     volatile bool live_stop_requested;
     volatile bool live_active;
     volatile bool live_start_failed;
+    volatile LiveUiScreen live_ui_screen;
+    LiveUiScreen live_controller_return_screen;
+    uint8_t live_recorder_selection;
     volatile BtStatus bt_status;
     volatile RunState state;
     volatile uint16_t completed_steps;
+    volatile uint32_t macro_elapsed_ms;
+    volatile uint32_t macro_cycles;
+    uint32_t macro_total_ms;
+    volatile bool macro_loop;
     volatile uint8_t failed_endpoint;
     volatile TxFailure tx_failure;
     volatile int32_t usb_result;
@@ -159,23 +248,112 @@ typedef struct {
     bool live_record_has_state;
     bool live_latest_valid;
     uint32_t live_record_last_tick;
+    uint32_t live_record_started_tick;
+    volatile uint32_t live_record_elapsed_ms;
     MacroFile macro_files[MACRO_MAX_FILES];
     uint8_t macro_count;
     uint8_t macro_index;
+    uint8_t macro_list_offset;
     uint8_t macro_action_index;
+    uint8_t macro_detail_selection;
     uint8_t home_index;
+    uint8_t simulator_selection;
+    uint8_t simulator_held_control;
+    SwitchReport simulator_report;
+    bool simulator_error;
+    bool simulator_stick_active;
     MacroUiScreen macro_ui_screen;
     char rename_name[MACRO_BASENAME_MAX + 1U];
     uint8_t rename_position;
-    char rename_character;
-    bool rename_end_selected;
+    uint8_t rename_keyboard_row;
+    uint8_t rename_keyboard_column;
+    bool rename_symbols;
+    bool rename_cursor_selected;
     char ui_message[32];
 } CivSwitchApp;
+
+static const RenameKey rename_alpha_row_0[] = {
+    {'Q', 1, 9, RenameKeyCharacter}, {'W', 10, 9, RenameKeyCharacter},
+    {'E', 19, 9, RenameKeyCharacter}, {'R', 28, 9, RenameKeyCharacter},
+    {'T', 37, 9, RenameKeyCharacter}, {'Y', 46, 9, RenameKeyCharacter},
+    {'U', 55, 9, RenameKeyCharacter}, {'I', 64, 9, RenameKeyCharacter},
+    {'O', 73, 9, RenameKeyCharacter}, {'P', 82, 9, RenameKeyCharacter},
+    {'0', 92, 9, RenameKeyCharacter}, {'1', 102, 9, RenameKeyCharacter},
+    {'2', 111, 9, RenameKeyCharacter}, {'3', 120, 9, RenameKeyCharacter},
+};
+
+static const RenameKey rename_alpha_row_1[] = {
+    {'A', 1, 9, RenameKeyCharacter}, {'S', 10, 9, RenameKeyCharacter},
+    {'D', 19, 9, RenameKeyCharacter}, {'F', 28, 9, RenameKeyCharacter},
+    {'G', 37, 9, RenameKeyCharacter}, {'H', 46, 9, RenameKeyCharacter},
+    {'J', 55, 9, RenameKeyCharacter}, {'K', 64, 9, RenameKeyCharacter},
+    {'L', 73, 9, RenameKeyCharacter}, {0, 82, 18, RenameKeyBackspace},
+    {'4', 102, 9, RenameKeyCharacter}, {'5', 111, 9, RenameKeyCharacter},
+    {'6', 120, 9, RenameKeyCharacter},
+};
+
+static const RenameKey rename_alpha_row_2[] = {
+    {0, 0, 11, RenameKeySymbols}, {'Z', 13, 9, RenameKeyCharacter},
+    {'X', 21, 9, RenameKeyCharacter}, {'C', 29, 9, RenameKeyCharacter},
+    {'V', 37, 9, RenameKeyCharacter}, {'B', 45, 9, RenameKeyCharacter},
+    {'N', 53, 9, RenameKeyCharacter}, {'M', 61, 9, RenameKeyCharacter},
+    {'_', 69, 9, RenameKeyCharacter}, {'-', 77, 9, RenameKeyCharacter},
+    {0, 84, 17, RenameKeySave}, {'7', 102, 9, RenameKeyCharacter},
+    {'8', 111, 9, RenameKeyCharacter}, {'9', 120, 9, RenameKeyCharacter},
+};
+
+static const RenameKey rename_symbol_row_0[] = {
+    {'!', 1, 9, RenameKeyCharacter}, {'@', 10, 9, RenameKeyCharacter},
+    {'#', 19, 9, RenameKeyCharacter}, {'$', 28, 9, RenameKeyCharacter},
+    {'%', 37, 9, RenameKeyCharacter}, {'&', 46, 9, RenameKeyCharacter},
+    {'(', 55, 9, RenameKeyCharacter}, {')', 64, 9, RenameKeyCharacter},
+    {'+', 73, 9, RenameKeyCharacter}, {'=', 82, 9, RenameKeyCharacter},
+    {'0', 92, 9, RenameKeyCharacter}, {'1', 102, 9, RenameKeyCharacter},
+    {'2', 111, 9, RenameKeyCharacter}, {'3', 120, 9, RenameKeyCharacter},
+};
+
+static const RenameKey rename_symbol_row_1[] = {
+    {'~', 1, 9, RenameKeyCharacter}, {';', 10, 9, RenameKeyCharacter},
+    {',', 19, 9, RenameKeyCharacter}, {'.', 28, 9, RenameKeyCharacter},
+    {'[', 37, 9, RenameKeyCharacter}, {']', 46, 9, RenameKeyCharacter},
+    {'{', 55, 9, RenameKeyCharacter}, {'}', 64, 9, RenameKeyCharacter},
+    {0, 73, 26, RenameKeyBackspace}, {'4', 102, 9, RenameKeyCharacter},
+    {'5', 111, 9, RenameKeyCharacter}, {'6', 120, 9, RenameKeyCharacter},
+};
+
+static const RenameKey rename_symbol_row_2[] = {
+    {0, 0, 11, RenameKeySymbols}, {'-', 13, 9, RenameKeyCharacter},
+    {'_', 21, 9, RenameKeyCharacter}, {'.', 29, 9, RenameKeyCharacter},
+    {'@', 37, 9, RenameKeyCharacter}, {'!', 45, 9, RenameKeyCharacter},
+    {'&', 53, 9, RenameKeyCharacter}, {'\'', 61, 9, RenameKeyCharacter},
+    {0, 69, 14, RenameKeySpace}, {0, 84, 17, RenameKeySave},
+    {'7', 102, 9, RenameKeyCharacter}, {'8', 111, 9, RenameKeyCharacter},
+    {'9', 120, 9, RenameKeyCharacter},
+};
+
+static const RenameKey* const rename_alpha_rows[] = {
+    rename_alpha_row_0, rename_alpha_row_1, rename_alpha_row_2};
+static const uint8_t rename_alpha_row_sizes[] = {
+    COUNT_OF(rename_alpha_row_0), COUNT_OF(rename_alpha_row_1), COUNT_OF(rename_alpha_row_2)};
+static const RenameKey* const rename_symbol_rows[] = {
+    rename_symbol_row_0, rename_symbol_row_1, rename_symbol_row_2};
+static const uint8_t rename_symbol_row_sizes[] = {
+    COUNT_OF(rename_symbol_row_0), COUNT_OF(rename_symbol_row_1), COUNT_OF(rename_symbol_row_2)};
+
+static const RenameKey* get_rename_keyboard_row(const CivSwitchApp* app, uint8_t row, uint8_t* size) {
+    if(app->rename_symbols) {
+        *size = rename_symbol_row_sizes[row];
+        return rename_symbol_rows[row];
+    }
+    *size = rename_alpha_row_sizes[row];
+    return rename_alpha_rows[row];
+}
 
 static CivSwitchApp* active_app;
 static bool keyboard_protocol_boot;
 
 static bool finish_live_recording(CivSwitchApp* app);
+static SwitchReport neutral_gamepad(void);
 
 static void wake_tx_waiters(CivSwitchApp* app) {
     if(app->gamepad_tx_sem) furi_semaphore_release(app->gamepad_tx_sem);
@@ -257,6 +435,7 @@ static usbd_respond configure_endpoints(usbd_device* dev, uint8_t cfg) {
         if(active_app) {
             active_app->configured = false;
             active_app->connected = false;
+            active_app->controller_wake_pending = false;
             wake_tx_waiters(active_app);
         }
         for(size_t i = 0; i < COUNT_OF(eps); i++) {
@@ -286,6 +465,7 @@ static usbd_respond configure_endpoints(usbd_device* dev, uint8_t cfg) {
     if(active_app) {
         active_app->configured = true;
         active_app->connected = true;
+        active_app->controller_wake_pending = true;
     }
     return usbd_ack;
 }
@@ -365,7 +545,10 @@ static void usb_suspend(usbd_device* dev) {
 
 static void usb_wakeup(usbd_device* dev) {
     UNUSED(dev);
-    if(active_app) active_app->connected = active_app->configured;
+    if(active_app) {
+        active_app->connected = active_app->configured;
+        if(active_app->configured) active_app->controller_wake_pending = true;
+    }
 }
 
 static void usb_state_callback(FuriHalUsbStateEvent event, void* ctx) {
@@ -373,11 +556,14 @@ static void usb_state_callback(FuriHalUsbStateEvent event, void* ctx) {
     if(event == FuriHalUsbStateEventReset) {
         app->connected = false;
         app->configured = false;
+        app->controller_wake_pending = false;
         wake_tx_waiters(app);
     } else if(event == FuriHalUsbStateEventWakeup) {
         app->connected = app->configured;
+        if(app->configured) app->controller_wake_pending = true;
     } else if(event == FuriHalUsbStateEventSuspend) {
         app->connected = false;
+        app->controller_wake_pending = false;
         wake_tx_waiters(app);
     }
 }
@@ -421,189 +607,610 @@ static const char* tx_failure_text(TxFailure failure) {
     return "USB error";
 }
 
-static void draw_macro_filename(Canvas* canvas, const char* name, int16_t y) {
-    char line[22];
-    const size_t length = strlen(name);
-    if(length > 19U) {
-        memcpy(line, name, 16U);
-        memcpy(line + 16U, "...", 4U);
-    } else {
-        memcpy(line, name, length + 1U);
+static void draw_macro_filename_at(Canvas* canvas, uint8_t x, const char* name, int16_t y) {
+    char line[MACRO_FILENAME_MAX];
+    snprintf(line, sizeof(line), "%s", name);
+    const uint8_t available_width = canvas_width(canvas) - x - 4U;
+    const uint8_t ellipsis_width = canvas_string_width(canvas, "...");
+    size_t length = strlen(line);
+    bool truncated = false;
+    while(length > 0U &&
+          (length > sizeof(line) - 4U ||
+           canvas_string_width(canvas, line) + ellipsis_width > available_width)) {
+        line[--length] = '\0';
+        truncated = true;
     }
-    canvas_draw_str(canvas, 4, y, line);
+    if(truncated) memcpy(line + length, "...", 4U);
+    canvas_draw_str(canvas, x, y, line);
+}
+
+static void draw_macro_filename(Canvas* canvas, const char* name, int16_t y) {
+    draw_macro_filename_at(canvas, 4U, name, y);
+}
+
+static void normalize_macro_list_offset(CivSwitchApp* app) {
+    if(app->macro_count <= MACRO_LIST_VISIBLE) {
+        app->macro_list_offset = 0U;
+        return;
+    }
+
+    if(app->macro_index < app->macro_list_offset) {
+        app->macro_list_offset = app->macro_index;
+    } else if(app->macro_index >= app->macro_list_offset + MACRO_LIST_VISIBLE) {
+        app->macro_list_offset = app->macro_index - MACRO_LIST_VISIBLE + 1U;
+    }
+
+    const uint8_t max_offset = app->macro_count - MACRO_LIST_VISIBLE;
+    if(app->macro_list_offset > max_offset) app->macro_list_offset = max_offset;
+}
+
+static void format_macro_duration(uint32_t duration_ms, char* output, size_t capacity) {
+    const uint32_t total_seconds = duration_ms / 1000U;
+    const uint32_t hours = total_seconds / 3600U;
+    const uint32_t minutes = (total_seconds / 60U) % 60U;
+    const uint32_t seconds = total_seconds % 60U;
+    if(hours) {
+        snprintf(
+            output,
+            capacity,
+            "%lu:%02lu:%02lu",
+            (unsigned long)hours,
+            (unsigned long)minutes,
+            (unsigned long)seconds);
+    } else {
+        snprintf(output, capacity, "%02lu:%02lu", (unsigned long)minutes, (unsigned long)seconds);
+    }
+}
+
+static void draw_macro_progress(Canvas* canvas, uint8_t x, uint8_t y, uint8_t width, uint32_t elapsed, uint32_t total) {
+    canvas_draw_frame(canvas, x, y, width, 8);
+    if(total == 0U) return;
+    if(elapsed > total) elapsed = total;
+    const uint8_t fill_width = (uint8_t)(((uint64_t)elapsed * (width - 2U)) / total);
+    if(fill_width) canvas_draw_box(canvas, x + 1U, y + 1U, fill_width, 6);
+}
+
+static void draw_header(Canvas* canvas, const char* title, const char* badge) {
+    canvas_draw_box(canvas, 0, 0, 128, 12);
+    canvas_set_color(canvas, ColorWhite);
+    canvas_set_font(canvas, FontPrimary);
+    canvas_draw_str(canvas, 4, 9, title);
+    if(badge && badge[0]) {
+        canvas_set_font(canvas, FontSecondary);
+        canvas_draw_str(canvas, 96, 9, badge);
+    }
+    canvas_set_color(canvas, ColorBlack);
+    canvas_set_font(canvas, FontSecondary);
+}
+
+static bool live_report_has_button(const SwitchReport* report, uint16_t mask) {
+    return (report->buttons & mask) != 0U;
+}
+
+static int8_t live_stick_offset(uint8_t value) {
+    const int16_t offset = ((int16_t)value - 128) / 24;
+    if(offset < -5) return -5;
+    if(offset > 5) return 5;
+    return (int8_t)offset;
+}
+
+static void draw_live_stick(
+    Canvas* canvas,
+    uint8_t center_x,
+    uint8_t center_y,
+    uint8_t horizontal,
+    uint8_t vertical,
+    bool pressed) {
+    const int32_t dot_x = center_x + live_stick_offset(horizontal);
+    const int32_t dot_y = center_y + live_stick_offset(vertical);
+    canvas_draw_circle(canvas, center_x, center_y, 9U);
+    canvas_draw_circle(canvas, center_x, center_y, 6U);
+    canvas_draw_disc(canvas, dot_x, dot_y, pressed ? 3U : 2U);
+}
+
+static void draw_controller_pill(
+    Canvas* canvas,
+    uint8_t x,
+    uint8_t y,
+    uint8_t width,
+    uint8_t height,
+    const char* label,
+    bool pressed) {
+    if(pressed) canvas_draw_rbox(canvas, x, y, width, height, 3U);
+    else canvas_draw_rframe(canvas, x, y, width, height, 3U);
+    canvas_set_color(canvas, pressed ? ColorWhite : ColorBlack);
+    canvas_set_font(canvas, FontSecondary);
+    const uint8_t label_width = canvas_string_width(canvas, label);
+    const uint8_t label_x = x + (width > label_width ? (width - label_width) / 2U : 0U);
+    canvas_draw_str(canvas, label_x, y + height - 1U, label);
+    canvas_set_color(canvas, ColorBlack);
+}
+
+static void draw_controller_round_button(
+    Canvas* canvas,
+    uint8_t center_x,
+    uint8_t center_y,
+    uint8_t radius,
+    const char* label,
+    bool pressed) {
+    if(pressed) {
+        canvas_draw_disc(canvas, center_x, center_y, radius);
+        canvas_set_color(canvas, ColorWhite);
+    } else {
+        canvas_draw_circle(canvas, center_x, center_y, radius);
+        canvas_set_color(canvas, ColorBlack);
+    }
+    canvas_set_font(canvas, FontSecondary);
+    const uint8_t label_width = canvas_string_width(canvas, label);
+    canvas_draw_str(canvas, center_x - label_width / 2U, center_y + 2U, label);
+    canvas_set_color(canvas, ColorBlack);
+}
+
+static void draw_controller_dpad(Canvas* canvas, const SwitchReport* report) {
+    const bool hat_up = report->hat == 0U || report->hat == 1U || report->hat == 7U;
+    const bool hat_right = report->hat == 1U || report->hat == 2U || report->hat == 3U;
+    const bool hat_down = report->hat == 3U || report->hat == 4U || report->hat == 5U;
+    const bool hat_left = report->hat == 5U || report->hat == 6U || report->hat == 7U;
+    canvas_draw_rbox(canvas, 39, 26, 9, 23, 3U);
+    canvas_draw_rbox(canvas, 31, 33, 25, 9, 3U);
+    canvas_set_color(canvas, ColorWhite);
+    canvas_draw_rbox(canvas, 40, 27, 7, 21, 2U);
+    canvas_draw_rbox(canvas, 32, 34, 23, 7, 2U);
+    canvas_set_color(canvas, ColorBlack);
+
+    if(hat_up) canvas_draw_disc(canvas, 43, 30, 2U);
+    if(hat_left) canvas_draw_disc(canvas, 35, 37, 2U);
+    if(hat_right) canvas_draw_disc(canvas, 51, 37, 2U);
+    if(hat_down) canvas_draw_disc(canvas, 43, 45, 2U);
+}
+
+static void draw_live_controller_icon(Canvas* canvas, const SwitchReport* report) {
+    static const int16_t outline[][2] = {
+        {25, 7},  {18, 9},  {12, 14}, {8, 21},   {5, 30},   {3, 40},   {4, 49},
+        {8, 56},  {13, 61}, {19, 62}, {24, 58},  {29, 53},  {40, 49},  {88, 49},
+        {99, 53}, {104, 58},{109, 62},{115, 61}, {120, 56}, {124, 49}, {125, 40},
+        {123, 30},{120, 21},{116, 14},{110, 9},  {103, 7},  {25, 7},
+    };
+    canvas_set_color(canvas, ColorBlack);
+    for(size_t i = 0U; i + 1U < COUNT_OF(outline); i++) {
+        canvas_draw_line(
+            canvas,
+            outline[i][0],
+            outline[i][1],
+            outline[i + 1U][0],
+            outline[i + 1U][1]);
+    }
+
+    canvas_draw_line(canvas, 42, 12, 51, 20);
+    canvas_draw_line(canvas, 51, 20, 77, 20);
+    canvas_draw_line(canvas, 77, 20, 86, 12);
+
+    draw_controller_pill(canvas, 19, 5, 15, 8, "L", live_report_has_button(report, SWITCH_BUTTON_L));
+    draw_controller_pill(canvas, 36, 5, 18, 8, "ZL", live_report_has_button(report, SWITCH_BUTTON_ZL));
+    draw_controller_pill(canvas, 74, 5, 18, 8, "ZR", live_report_has_button(report, SWITCH_BUTTON_ZR));
+    draw_controller_pill(canvas, 94, 5, 15, 8, "R", live_report_has_button(report, SWITCH_BUTTON_R));
+
+    draw_live_stick(canvas, 27, 23, report->lx, report->ly, false);
+    draw_controller_pill(canvas, 34U, 19U, 15U, 8U, "L3", live_report_has_button(report, SWITCH_BUTTON_L3));
+    draw_controller_dpad(canvas, report);
+    draw_live_stick(canvas, 82, 37, report->rx, report->ry, false);
+    draw_controller_pill(canvas, 88U, 44U, 15U, 8U, "R3", live_report_has_button(report, SWITCH_BUTTON_R3));
+
+    draw_controller_round_button(canvas, 64, 15, 5U, "H", live_report_has_button(report, SWITCH_BUTTON_HOME));
+    draw_controller_round_button(canvas, 57, 23, 4U, "-", live_report_has_button(report, SWITCH_BUTTON_MINUS));
+    draw_controller_round_button(canvas, 72, 23, 4U, "+", live_report_has_button(report, SWITCH_BUTTON_PLUS));
+    draw_controller_round_button(canvas, 64, 30, 3U, "C", live_report_has_button(report, SWITCH_BUTTON_CAPTURE));
+
+    draw_controller_round_button(canvas, 109, 22, 5U, "X", live_report_has_button(report, SWITCH_BUTTON_X));
+    draw_controller_round_button(canvas, 99, 33, 5U, "Y", live_report_has_button(report, SWITCH_BUTTON_Y));
+    draw_controller_round_button(canvas, 119, 33, 5U, "A", live_report_has_button(report, SWITCH_BUTTON_A));
+    draw_controller_round_button(canvas, 109, 44, 5U, "B", live_report_has_button(report, SWITCH_BUTTON_B));
+}
+
+static void draw_simulator_focus(Canvas* canvas, uint8_t selection, bool stick_active) {
+    if(selection >= SimulatorControlCount) return;
+    const SimulatorControl* control = &simulator_controls[selection];
+    if(selection <= SimulatorControlR) {
+        canvas_draw_rframe(canvas, control->x - 9U, control->y - 6U, 18U, 13U, 3U);
+    } else if(selection == SimulatorControlLeftStick || selection == SimulatorControlRightStick) {
+        canvas_draw_circle(canvas, control->x, control->y, 11U);
+        if(stick_active) canvas_draw_circle(canvas, control->x, control->y, 13U);
+    } else if(selection == SimulatorControlL3 || selection == SimulatorControlR3) {
+        canvas_draw_rframe(canvas, control->x - 9U, control->y - 5U, 18U, 10U, 3U);
+    } else if(selection >= SimulatorControlDpadUp && selection <= SimulatorControlDpadRight) {
+        canvas_draw_circle(canvas, control->x, control->y, 4U);
+    } else {
+        canvas_draw_circle(canvas, control->x, control->y, 7U);
+    }
+}
+
+static void draw_simulator_ui(Canvas* canvas, const CivSwitchApp* app) {
+    draw_live_controller_icon(canvas, &app->simulator_report);
+    draw_simulator_focus(canvas, app->simulator_selection, app->simulator_stick_active);
+    if(!app->connected || app->simulator_error) {
+        canvas_draw_box(canvas, 0, 54, 128, 10);
+        canvas_set_color(canvas, ColorWhite);
+        canvas_draw_str(canvas, 35, 62, app->connected ? "USB SEND ERROR" : "USB DISCONNECTED");
+        canvas_set_color(canvas, ColorBlack);
+    }
+}
+
+static void get_live_display_report(const CivSwitchApp* app, SwitchReport* report) {
+    *report = neutral_gamepad();
+    if(!app->live_record_mutex ||
+       furi_mutex_acquire(app->live_record_mutex, 0U) != FuriStatusOk) {
+        return;
+    }
+    if(app->live_latest_valid) *report = app->live_latest_state;
+    furi_mutex_release(app->live_record_mutex);
+}
+
+static void draw_live_controller(Canvas* canvas, const CivSwitchApp* app) {
+    SwitchReport report;
+    get_live_display_report(app, &report);
+    draw_live_controller_icon(canvas, &report);
+}
+
+static void draw_connection_row(Canvas* canvas, uint8_t y, const char* label, const char* value, bool connected) {
+    if(connected) canvas_draw_box(canvas, 4, y - 3U, 3, 3);
+    else canvas_draw_frame(canvas, 4, y - 3U, 3, 3);
+    canvas_draw_str(canvas, 11, y, label);
+    canvas_draw_str(canvas, 47, y, value);
+}
+
+static void draw_live_menu(Canvas* canvas, const CivSwitchApp* app) {
+    draw_header(
+        canvas,
+        "LIVE RELAY",
+        app->tx_failure != TxFailureNone ? "ERR" : (app->live_recording ? "REC" : "LIVE"));
+    draw_connection_row(canvas, 21U, "USB", app->connected ? "CONNECTED" : "WAITING", app->connected);
+    draw_connection_row(
+        canvas,
+        29U,
+        "BLE",
+        app->bt_status == BtStatusConnected ? "CONNECTED" : "WAITING",
+        app->bt_status == BtStatusConnected);
+
+    const uint8_t y = 43U;
+    canvas_draw_box(canvas, 4, y, 120, 15);
+    canvas_set_color(canvas, ColorWhite);
+    canvas_draw_frame(canvas, 9, y + 4U, 7, 7);
+    canvas_draw_line(canvas, 11, y + 3U, 14, y + 3U);
+    canvas_draw_str(canvas, 23, y + 10U, "RECORDER");
+    canvas_draw_str(canvas, 116, y + 10U, ">");
+    canvas_set_color(canvas, ColorBlack);
+}
+
+static void draw_live_recorder(Canvas* canvas, const CivSwitchApp* app) {
+    char line[28];
+    char elapsed[12];
+    const uint32_t record_elapsed = app->live_recording ?
+                                        furi_get_tick() - app->live_record_started_tick :
+                                        app->live_record_elapsed_ms;
+    format_macro_duration(record_elapsed, elapsed, sizeof(elapsed));
+
+    if(app->live_recording) {
+        snprintf(line, sizeof(line), "RECORDING INPUT");
+    } else if(app->live_record_full) {
+        snprintf(line, sizeof(line), "STORAGE LIMIT REACHED");
+    } else if(app->live_record_saved) {
+        snprintf(line, sizeof(line), "SAVED %.18s", app->live_record_saved_name);
+    } else if(app->ui_message[0]) {
+        snprintf(line, sizeof(line), "%.22s", app->ui_message);
+    } else {
+        snprintf(line, sizeof(line), "READY TO RECORD");
+    }
+
+    draw_header(
+        canvas,
+        "LIVE RECORDER",
+        app->live_recording ? "REC" :
+            (app->live_record_full ? "FULL" : (app->live_record_saved ? "SAVED" : "READY")));
+    canvas_draw_str(canvas, 5, 22, line);
+
+    canvas_draw_frame(canvas, 4, 25, 58, 21);
+    canvas_draw_frame(canvas, 66, 25, 58, 21);
+    canvas_draw_str(canvas, 9, 33, "DURATION");
+    canvas_draw_str(canvas, 71, 33, "STEPS");
+    canvas_set_font(canvas, FontPrimary);
+    canvas_draw_str(canvas, 9, 43, elapsed);
+    snprintf(line, sizeof(line), "%u", (unsigned)app->live_record_steps);
+    canvas_draw_str(canvas, 71, 43, line);
+    canvas_set_font(canvas, FontSecondary);
+
+    for(uint8_t i = 0U; i < 2U; i++) {
+        const uint8_t y = i == 0U ? 47U : 56U;
+        const bool selected = i == app->live_recorder_selection;
+        const char* label = i == 0U ?
+                                (app->live_recording || app->live_record_full ? "STOP AND SAVE" :
+                                     (app->live_record_saved ? "RECORD AGAIN" : "START RECORDING")) :
+                                "VIEW CONTROLLER";
+        if(selected) canvas_draw_box(canvas, 2, y, 124, 8);
+        else canvas_draw_frame(canvas, 2, y, 124, 8);
+        canvas_set_color(canvas, selected ? ColorWhite : ColorBlack);
+        canvas_draw_str(canvas, 8, y + 7U, label);
+        canvas_draw_str(canvas, 116, y + 7U, ">");
+        canvas_set_color(canvas, ColorBlack);
+    }
+}
+
+static void draw_rename_ui(Canvas* canvas, const CivSwitchApp* app) {
+    char preview[MACRO_BASENAME_MAX + 2U];
+    const size_t length = strlen(app->rename_name);
+    const size_t cursor = app->rename_position > length ? length : app->rename_position;
+    canvas_set_color(canvas, ColorBlack);
+    canvas_set_font(canvas, FontSecondary);
+    memcpy(preview, app->rename_name, cursor);
+    preview[cursor] = '|';
+    memcpy(preview + cursor + 1U, app->rename_name + cursor, length - cursor + 1U);
+
+    canvas_draw_str(canvas, 3, 8, app->ui_message[0] ? app->ui_message : "RENAME MACRO");
+    canvas_draw_str(canvas, 104, 8, app->rename_symbols ? "SYM" : "ABC");
+    canvas_draw_frame(canvas, 2, 11, 124, 14);
+    canvas_draw_str(canvas, 6, 21, preview);
+
+    canvas_set_font(canvas, FontKeyboard);
+    for(uint8_t row = 0U; row < 3U; row++) {
+        uint8_t key_count;
+        const RenameKey* keys = get_rename_keyboard_row(app, row, &key_count);
+        const uint8_t baseline = 35U + row * 11U;
+        for(uint8_t column = 0U; column < key_count; column++) {
+            const RenameKey* key = &keys[column];
+            const bool selected = !app->rename_cursor_selected &&
+                                  row == app->rename_keyboard_row &&
+                                  column == app->rename_keyboard_column;
+            const uint8_t frame_x =
+                key->action == RenameKeyCharacter && key->x >= 2U ? key->x - 2U : key->x;
+            if(selected) {
+                canvas_draw_box(canvas, frame_x, baseline - 9U, key->width, 11U);
+                canvas_set_color(canvas, ColorWhite);
+            } else if(key->action != RenameKeyCharacter) {
+                canvas_draw_frame(canvas, frame_x, baseline - 9U, key->width, 11U);
+            }
+
+            if(key->action == RenameKeyCharacter) {
+                canvas_draw_glyph(canvas, key->x, baseline, key->value);
+            } else {
+                const char* label = key->action == RenameKeyBackspace ? "DEL" :
+                                    key->action == RenameKeySymbols ? "+=#" :
+                                    key->action == RenameKeySpace ? "SPC" : "SAVE";
+                canvas_set_font(canvas, FontSecondary);
+                const uint8_t label_width = canvas_string_width(canvas, label);
+                const uint8_t label_x = frame_x + (key->width > label_width ? (key->width - label_width) / 2U : 0U);
+                canvas_draw_str(canvas, label_x, baseline - 2U, label);
+                canvas_set_font(canvas, FontKeyboard);
+            }
+            canvas_set_color(canvas, ColorBlack);
+        }
+    }
+    canvas_set_font(canvas, FontSecondary);
 }
 
 static void draw_macro_ui(Canvas* canvas, const CivSwitchApp* app) {
     char line[32];
-    canvas_set_font(canvas, FontPrimary);
-    canvas_draw_str(canvas, 18, 10, "Switch Macro");
-    canvas_set_font(canvas, FontSecondary);
-
+    char duration[12];
     if(app->macro_ui_screen == MacroUiHome) {
-        canvas_draw_str(canvas, 4, 22, app->connected ? "USB: Switch connected" : "USB: waiting for Switch");
-        static const char* modes[] = {"Macros", "Live"};
-        for(uint8_t i = 0U; i < 2U; i++) {
-            const uint8_t row_y = 39U + (uint8_t)(i * 13U);
-            if(i == app->home_index) {
-                canvas_draw_box(canvas, 0, row_y - 10, 128, 13);
-                canvas_set_color(canvas, ColorWhite);
-                canvas_draw_str(canvas, 8, row_y, modes[i]);
-                canvas_set_color(canvas, ColorBlack);
+        draw_header(canvas, "SWITCH MACRO", app->connected ? "READY" : "WAIT");
+
+        for(uint8_t i = 0U; i < 3U; i++) {
+            const uint8_t y = 17U + i * 15U;
+            const bool selected = i == app->home_index;
+            if(selected) canvas_draw_box(canvas, 4, y, 120, 13);
+            else canvas_draw_frame(canvas, 4, y, 120, 13);
+            canvas_set_color(canvas, selected ? ColorWhite : ColorBlack);
+            const char* labels[] = {"Macros", "Live relay", "Simulator"};
+            canvas_draw_str(canvas, 10, y + 9U, labels[i]);
+            if(i == 0U) {
+                snprintf(line, sizeof(line), "%u FILES", (unsigned)app->macro_count);
+                canvas_draw_str(canvas, 78, y + 9U, line);
             } else {
-                canvas_draw_str(canvas, 8, row_y, modes[i]);
+                canvas_draw_str(canvas, 101, y + 9U, i == 1U ? "PC" : "USB");
             }
+            canvas_set_color(canvas, ColorBlack);
         }
         if(app->live_start_failed) {
-            canvas_draw_str(canvas, 4, 56, "Could not start Live");
+            canvas_draw_str(canvas, 5, 63, "Could not start Live");
         } else if(app->ui_message[0]) {
-            canvas_draw_str(canvas, 4, 56, app->ui_message);
+            canvas_draw_str(canvas, 5, 63, app->ui_message);
         }
-        canvas_draw_str(canvas, 4, 64, "Up/Down choose  OK enter");
     } else if(app->macro_ui_screen == MacroUiList) {
-        canvas_draw_str(canvas, 4, 22, app->connected ? "USB: Switch connected" : "USB: waiting for Switch");
+        snprintf(line, sizeof(line), "%u/%u", (unsigned)app->macro_index + 1U, (unsigned)app->macro_count);
+        draw_header(canvas, "MACRO LIBRARY", app->macro_count ? line : "SD CARD");
         if(app->macro_count == 0U) {
-            canvas_draw_str(canvas, 4, 38, "No .txt macros on SD");
-            if(app->ui_message[0]) canvas_draw_str(canvas, 4, 49, app->ui_message);
+            canvas_draw_frame(canvas, 5, 22, 118, 34);
+            canvas_set_font(canvas, FontPrimary);
+            canvas_draw_str(canvas, 22, 38, "NO MACROS");
+            canvas_set_font(canvas, FontSecondary);
+            canvas_draw_str(canvas, 24, 49, "Add .txt files to SD");
+            if(app->ui_message[0]) canvas_draw_str(canvas, 5, 63, app->ui_message);
         } else {
-            snprintf(line, sizeof(line), "Macro %u of %u", (unsigned)app->macro_index + 1U, (unsigned)app->macro_count);
-            canvas_draw_str(canvas, 4, 32, line);
-            canvas_draw_frame(canvas, 0, 34, 128, 15);
-            draw_macro_filename(canvas, app->macro_files[app->macro_index].name, 45);
-            const char* message = app->load_error == MacroLoadOk ? app->ui_message : macro_load_error_text(app->load_error);
-            if(app->load_error == MacroLoadBadSyntax) {
-                snprintf(line, sizeof(line), "Syntax error line %u", (unsigned)app->load_error_line);
-                message = line;
-            }
-            if(message[0]) canvas_draw_str(canvas, 4, 53, message);
-        }
-        canvas_draw_str(canvas, 4, 58, "OK play  Right options");
-        canvas_draw_str(canvas, 4, 64, "Back: menu");
-    } else if(app->macro_ui_screen == MacroUiActions) {
-        draw_macro_filename(canvas, app->macro_files[app->macro_index].name, 22);
-        static const char* actions[] = {"Play", "Rename", "Delete"};
-        for(uint8_t i = 0U; i < 3U; i++) {
-            const uint8_t row_y = 35U + (uint8_t)(i * 10U);
-            if(i == app->macro_action_index) {
-                canvas_draw_box(canvas, 0, row_y - 8, 128, 10);
-                canvas_set_color(canvas, ColorWhite);
-                canvas_draw_str(canvas, 4, row_y, actions[i]);
+            const uint8_t visible_count = app->macro_count - app->macro_list_offset < MACRO_LIST_VISIBLE ?
+                                              app->macro_count - app->macro_list_offset :
+                                              MACRO_LIST_VISIBLE;
+            for(uint8_t row = 0U; row < visible_count; row++) {
+                const uint8_t index = app->macro_list_offset + row;
+                const uint8_t y = 14U + row * 10U;
+                const bool selected = index == app->macro_index;
+                if(selected) canvas_draw_box(canvas, 3, y, 122, 9);
+                canvas_set_color(canvas, selected ? ColorWhite : ColorBlack);
+                draw_macro_filename_at(canvas, 9U, app->macro_files[index].name, y + 7U);
                 canvas_set_color(canvas, ColorBlack);
+            }
+
+            if(app->load_error != MacroLoadOk) {
+                if(app->load_error == MacroLoadBadSyntax) {
+                    snprintf(line, sizeof(line), "SYNTAX ERROR  LINE %u", (unsigned)app->load_error_line);
+                } else {
+                    snprintf(line, sizeof(line), "%s", macro_load_error_text(app->load_error));
+                }
+                canvas_draw_str(canvas, 5, 61, line);
+            } else if(app->ui_message[0]) {
+                canvas_draw_str(canvas, 5, 61, app->ui_message);
             } else {
-                canvas_draw_str(canvas, 4, row_y, actions[i]);
+                format_macro_duration(app->macro_total_ms, duration, sizeof(duration));
+                snprintf(line, sizeof(line), "STEPS %u   %s", (unsigned)app->step_count, duration);
+                canvas_draw_str(canvas, 5, 61, line);
             }
         }
-        canvas_draw_str(canvas, 4, 63, "Up/Down choose OK select");
-    } else if(app->macro_ui_screen == MacroUiRename) {
-        canvas_draw_str(canvas, 4, 22, "Edit name; .txt is kept");
-        char preview[MACRO_BASENAME_MAX + 1U];
-        memcpy(preview, app->rename_name, sizeof(preview));
-        const size_t length = strlen(preview);
-        if(app->rename_end_selected) {
-            if(app->rename_position < length) preview[app->rename_position] = '\0';
-        } else if(app->rename_position < MACRO_BASENAME_MAX) {
-            preview[app->rename_position] = app->rename_character;
-            if(app->rename_position == length) preview[length + 1U] = '\0';
+    } else if(app->macro_ui_screen == MacroUiDetails) {
+        snprintf(line, sizeof(line), "%u/%u", (unsigned)app->macro_index + 1U, (unsigned)app->macro_count);
+        draw_header(canvas, "MACRO DETAILS", line);
+        draw_macro_filename(canvas, app->macro_files[app->macro_index].name, 24);
+
+        canvas_draw_frame(canvas, 4, 28, 58, 17);
+        canvas_draw_frame(canvas, 66, 28, 58, 17);
+        canvas_draw_str(canvas, 9, 35, "DURATION");
+        canvas_draw_str(canvas, 72, 35, "STEPS");
+        canvas_set_font(canvas, FontPrimary);
+        format_macro_duration(app->macro_total_ms, duration, sizeof(duration));
+        canvas_draw_str(canvas, 9, 43, duration);
+        snprintf(line, sizeof(line), "%u", (unsigned)app->step_count);
+        canvas_draw_str(canvas, 72, 43, line);
+        canvas_set_font(canvas, FontSecondary);
+
+        if(app->macro_detail_selection == 0U) canvas_draw_box(canvas, 2, 47, 124, 9);
+        canvas_set_color(canvas, app->macro_detail_selection == 0U ? ColorWhite : ColorBlack);
+        canvas_draw_str(canvas, 8, 54, app->macro_loop ? "LOOP   ON" : "LOOP   OFF");
+        canvas_set_color(canvas, ColorBlack);
+
+        if(app->macro_detail_selection == 1U) canvas_draw_box(canvas, 2, 56, 124, 8);
+        canvas_set_color(canvas, app->macro_detail_selection == 1U ? ColorWhite : ColorBlack);
+        canvas_draw_str(canvas, 8, 63, "PLAY MACRO");
+        canvas_set_color(canvas, ColorBlack);
+    } else if(app->macro_ui_screen == MacroUiActions) {
+        draw_header(canvas, "MACRO OPTIONS", NULL);
+        draw_macro_filename(canvas, app->macro_files[app->macro_index].name, 24);
+        static const char* actions[] = {"PLAY MACRO", "RENAME FILE", "DELETE FILE"};
+        static const char* descriptions[] = {"RUN", "EDIT NAME", "REMOVE"};
+        for(uint8_t i = 0U; i < 3U; i++) {
+            const uint8_t y = 28U + (uint8_t)(i * 12U);
+            const bool selected = i == app->macro_action_index;
+            if(selected) canvas_draw_box(canvas, 3, y, 122, 11);
+            else canvas_draw_frame(canvas, 3, y, 122, 11);
+            canvas_set_color(canvas, selected ? ColorWhite : ColorBlack);
+            canvas_draw_str(canvas, 9, y + 8U, actions[i]);
+            canvas_draw_str(canvas, 88, y + 8U, descriptions[i]);
+            canvas_set_color(canvas, ColorBlack);
         }
-        snprintf(line, sizeof(line), "%.19s", preview);
-        canvas_draw_str(canvas, 4, 37, line);
-        snprintf(
-            line,
-            sizeof(line),
-            "Pos %u: %s",
-            (unsigned)app->rename_position + 1U,
-            app->rename_end_selected ? "END" : (char[2]){app->rename_character, '\0'});
-        canvas_draw_str(canvas, 4, 49, line);
-        if(app->ui_message[0]) canvas_draw_str(canvas, 4, 58, app->ui_message);
-        canvas_draw_str(canvas, 4, 64, "L/R pos U/D char OK save");
-    } else {
-        canvas_draw_str(canvas, 4, 30, "Delete this macro?");
-        draw_macro_filename(canvas, app->macro_files[app->macro_index].name, 42);
-        canvas_draw_str(canvas, 4, 62, "OK: delete  Back: cancel");
+    } else if(app->macro_ui_screen == MacroUiRename) {
+        draw_rename_ui(canvas, app);
+    } else if(app->macro_ui_screen == MacroUiDeleteConfirm) {
+        draw_header(canvas, "DELETE MACRO?", "!");
+        canvas_draw_frame(canvas, 4, 22, 120, 28);
+        canvas_set_font(canvas, FontPrimary);
+        canvas_draw_str(canvas, 12, 40, "REMOVE");
+        canvas_set_font(canvas, FontSecondary);
+        draw_macro_filename(canvas, app->macro_files[app->macro_index].name, 47);
+        canvas_draw_box(canvas, 2, 54, 124, 10);
+        canvas_set_color(canvas, ColorWhite);
+        canvas_draw_str(canvas, 8, 62, "DELETE PERMANENTLY");
+        canvas_set_color(canvas, ColorBlack);
+    } else if(app->macro_ui_screen == MacroUiSimulator) {
+        draw_simulator_ui(canvas, app);
     }
 }
 
 static void app_draw(Canvas* canvas, void* ctx) {
     const CivSwitchApp* app = ctx;
     canvas_clear(canvas);
-    if(app->state != RunReady) {
-        canvas_set_font(canvas, FontPrimary);
-        canvas_draw_str(canvas, 20, 12, "Switch Macro");
-        canvas_set_font(canvas, FontSecondary);
-        canvas_draw_str(canvas, 4, 27, app->connected ? "USB: controller ready" : "USB: waiting for Switch...");
-    }
     char line[32];
+    char elapsed[12];
+    char total[12];
     switch(app->state) {
     case RunReady:
         draw_macro_ui(canvas, app);
         break;
     case RunSending:
-        snprintf(line, sizeof(line), "Step %u / %u", (unsigned)app->completed_steps + 1U, (unsigned)app->step_count);
-        canvas_draw_str(canvas, 4, 42, line);
-        canvas_draw_str(canvas, 4, 56, "Back: stop and release");
-        break;
-    case RunLive:
-        canvas_draw_str(
-            canvas,
-            4,
-            42,
-            app->bt_status == BtStatusConnected ? "BLE: PC connected" : "BLE: waiting for PC");
-        if(app->tx_failure != TxFailureNone) {
-            snprintf(line, sizeof(line), "%s EP %02X", tx_failure_text(app->tx_failure), app->failed_endpoint);
-        } else if(app->live_recording) {
-            snprintf(line, sizeof(line), "REC %u USB %u", (unsigned)app->live_record_steps, (unsigned)app->live_reports_sent);
-        } else if(app->live_record_full) {
-            snprintf(line, sizeof(line), "REC FULL %u", (unsigned)app->live_record_steps);
-        } else if(app->live_record_saved) {
-            snprintf(line, sizeof(line), "Saved %.18s", app->live_record_saved_name);
-        } else if(!app->live_record_mutex) {
-            snprintf(line, sizeof(line), "REC unavailable");
-        } else if(app->ui_message[0]) {
-            snprintf(line, sizeof(line), "%.21s", app->ui_message);
+        draw_header(canvas, app->macro_loop ? "MACRO LOOP" : "MACRO PLAYBACK", NULL);
+        draw_macro_filename(canvas, app->macro_files[app->macro_index].name, 24);
+        if(app->macro_loop) {
+            snprintf(
+                line,
+                sizeof(line),
+                "STEP %u/%u   CYCLE %lu",
+                (unsigned)(app->completed_steps < app->step_count ? app->completed_steps + 1U : app->step_count),
+                (unsigned)app->step_count,
+                (unsigned long)app->macro_cycles + 1U);
         } else {
             snprintf(
                 line,
                 sizeof(line),
-                "BLE %u USB %u X%u",
-                (unsigned)app->live_frames_received,
-                (unsigned)app->live_reports_sent,
-                (unsigned)app->live_frames_dropped);
+                "STEP %u/%u",
+                (unsigned)(app->completed_steps < app->step_count ? app->completed_steps + 1U : app->step_count),
+                (unsigned)app->step_count);
         }
-        canvas_draw_str(canvas, 4, 53, line);
-        if(app->live_recording) {
-            canvas_draw_str(canvas, 4, 63, "OK stop/save  Back menu");
-        } else if(app->live_record_full) {
-            canvas_draw_str(canvas, 4, 63, "OK save  Back menu");
+        canvas_draw_str(canvas, 5, 35, line);
+        draw_macro_progress(canvas, 4, 40, 120, app->macro_elapsed_ms, app->macro_total_ms);
+        format_macro_duration(app->macro_elapsed_ms, elapsed, sizeof(elapsed));
+        format_macro_duration(app->macro_total_ms, total, sizeof(total));
+        snprintf(line, sizeof(line), "%s / %s", elapsed, total);
+        canvas_draw_str(canvas, 5, 59, line);
+        break;
+    case RunLive:
+        if(app->live_ui_screen == LiveUiMenu) {
+            draw_live_menu(canvas, app);
+        } else if(app->live_ui_screen == LiveUiRecorder) {
+            draw_live_recorder(canvas, app);
         } else {
-            canvas_draw_str(canvas, 4, 63, "OK record  Back menu");
+            draw_live_controller(canvas, app);
         }
         break;
     case RunFinished:
-        canvas_draw_str(canvas, 4, 42, "Macro complete.");
-        canvas_draw_str(canvas, 4, 56, "Back: macros");
+        draw_header(canvas, "PLAY COMPLETE", "DONE");
+        draw_macro_filename(canvas, app->macro_files[app->macro_index].name, 25);
+        format_macro_duration(app->macro_total_ms, total, sizeof(total));
+        canvas_draw_frame(canvas, 4, 31, 120, 21);
+        canvas_draw_str(canvas, 12, 39, "STEPS");
+        canvas_set_font(canvas, FontPrimary);
+        snprintf(line, sizeof(line), "%u", (unsigned)app->step_count);
+        canvas_draw_str(canvas, 12, 49, line);
+        canvas_set_font(canvas, FontSecondary);
+        canvas_draw_str(canvas, 74, 39, "DURATION");
+        canvas_set_font(canvas, FontPrimary);
+        canvas_draw_str(canvas, 74, 49, total);
         break;
     case RunCanceled:
-        canvas_draw_str(canvas, 4, 42, "Stopped; pad released.");
-        canvas_draw_str(canvas, 4, 56, "Back: macros");
+        draw_header(canvas, "PLAYBACK STOPPED", NULL);
+        draw_macro_filename(canvas, app->macro_files[app->macro_index].name, 25);
+        format_macro_duration(app->macro_elapsed_ms, elapsed, sizeof(elapsed));
+        canvas_draw_frame(canvas, 4, 31, 120, 21);
+        canvas_set_font(canvas, FontSecondary);
+        canvas_draw_str(canvas, 12, 40, "STOPPED AT");
+        canvas_set_font(canvas, FontPrimary);
+        canvas_draw_str(canvas, 12, 49, elapsed);
         break;
     case RunError:
-        canvas_draw_str(canvas, 4, 42, tx_failure_text(app->tx_failure));
-        snprintf(line, sizeof(line), "Step %u  EP %02X", (unsigned)app->completed_steps + 1U, app->failed_endpoint);
-        canvas_draw_str(canvas, 4, 54, line);
-        canvas_draw_str(canvas, 4, 63, "Back: macros");
+        snprintf(line, sizeof(line), "EP %02X", app->failed_endpoint);
+        draw_header(canvas, "USB ERROR", line);
+        canvas_draw_str(canvas, 5, 26, tx_failure_text(app->tx_failure));
+        draw_macro_filename(canvas, app->macro_files[app->macro_index].name, 39);
+        canvas_draw_frame(canvas, 4, 44, 120, 15);
+        snprintf(line, sizeof(line), "STEP %u FAILED", (unsigned)app->completed_steps + 1U);
+        canvas_draw_str(canvas, 10, 54, line);
         break;
     }
 }
 
 static void app_input(InputEvent* event, void* ctx) {
     CivSwitchApp* app = ctx;
-    if(event->type == InputTypePress) furi_message_queue_put(app->input_queue, event, 0);
+    if(event->type == InputTypePress || event->type == InputTypeRelease ||
+       event->type == InputTypeRepeat) {
+        furi_message_queue_put(app->input_queue, event, 0);
+    }
 }
 
 static bool delay_or_cancel(CivSwitchApp* app, uint32_t delay_ms) {
+    uint32_t update_elapsed = 0U;
     while(delay_ms && !app->stop_requested) {
         const uint32_t part = delay_ms > 10 ? 10 : delay_ms;
         furi_delay_ms(part);
         delay_ms -= part;
+        app->macro_elapsed_ms += part;
+        update_elapsed += part;
+        if(update_elapsed >= 250U) {
+            view_port_update(app->view_port);
+            update_elapsed = 0U;
+        }
     }
     return !app->stop_requested;
 }
@@ -687,6 +1294,38 @@ static bool send_gamepad_report(
     report.rx = rx;
     report.ry = ry;
     return send_report(app, EP_GAMEPAD_IN, &report, sizeof(report));
+}
+
+static bool send_controller_wake_sequence(CivSwitchApp* app) {
+    if(!app->connected || !app->configured) return false;
+    furi_delay_ms(150U);
+    if(!app->connected) return false;
+
+    bool sent = send_gamepad_report(app, 0U, SWITCH_HAT_NONE, 0x80U, 0x80U, 0x80U, 0x80U);
+    if(sent) sent = wait_report_complete(app, EP_GAMEPAD_IN);
+    if(!sent || !app->connected) return false;
+
+    sent = send_gamepad_report(
+        app, SWITCH_BUTTON_A, SWITCH_HAT_NONE, 0x80U, 0x80U, 0x80U, 0x80U);
+    if(sent) sent = wait_report_complete(app, EP_GAMEPAD_IN);
+    if(!sent || !app->connected) return false;
+
+    furi_delay_ms(60U);
+    if(!app->connected) return false;
+
+    sent = send_gamepad_report(app, 0U, SWITCH_HAT_NONE, 0x80U, 0x80U, 0x80U, 0x80U);
+    if(sent) wait_report_complete(app, EP_GAMEPAD_IN);
+    return sent && app->connected;
+}
+
+static void service_controller_wake(CivSwitchApp* app) {
+    if(!app->controller_wake_pending || !app->connected || !app->configured ||
+       app->state != RunReady || app->live_active || app->worker) {
+        return;
+    }
+
+    app->controller_wake_pending = false;
+    send_controller_wake_sequence(app);
 }
 
 static void live_queue_report(CivSwitchApp* app, const SwitchReport* report) {
@@ -802,6 +1441,7 @@ static void live_record_state(CivSwitchApp* app, const SwitchReport* report, uin
     app->live_latest_state = *report;
     app->live_latest_valid = true;
     if(app->live_recording && app->live_record_text) {
+        app->live_record_elapsed_ms = tick - app->live_record_started_tick;
         if(!app->live_record_has_state) {
             app->live_record_state = *report;
             app->live_record_last_tick = tick;
@@ -891,6 +1531,16 @@ static int32_t live_worker(void* context) {
     }
 
     while(!app->live_stop_requested) {
+        if(app->controller_wake_pending && app->connected) {
+            app->controller_wake_pending = false;
+            if(!send_controller_wake_sequence(app) ||
+               !send_gamepad_report(
+                   app, current.buttons, current.hat, current.lx, current.ly, current.rx, current.ry)) {
+                app->live_stop_requested = true;
+                break;
+            }
+        }
+
         SwitchReport report;
         if(furi_message_queue_get(app->live_queue, &report, 50) == FuriStatusOk) {
             current = report;
@@ -935,11 +1585,16 @@ static bool start_live_mode(CivSwitchApp* app) {
             app->live_record_saved = false;
             app->live_record_has_state = false;
             app->live_record_saved_name[0] = '\0';
+            app->live_record_elapsed_ms = 0U;
             app->ui_message[0] = '\0';
         }
         furi_mutex_release(app->live_record_mutex);
         if(!recorder_ready) return false;
     }
+
+    app->live_ui_screen = LiveUiMenu;
+    app->live_controller_return_screen = LiveUiRecorder;
+    app->live_recorder_selection = 0U;
 
     app->bt = furi_record_open(RECORD_BT);
     if(!app->bt) return false;
@@ -1372,6 +2027,7 @@ static void refresh_macro_files(CivSwitchApp* app) {
         }
         if(strcmp(app->macro_files[i].name, MACRO_DEFAULT_NAME) == 0) app->macro_index = i;
     }
+    normalize_macro_list_offset(app);
     app->ui_message[0] = '\0';
 }
 
@@ -1397,6 +2053,8 @@ static bool start_live_recording(CivSwitchApp* app) {
     app->live_record_full = false;
     app->live_record_saved = false;
     app->live_record_saved_name[0] = '\0';
+    app->live_record_started_tick = furi_get_tick();
+    app->live_record_elapsed_ms = 0U;
     app->live_recording = true;
     app->ui_message[0] = '\0';
     app->live_record_has_state = app->live_latest_valid;
@@ -1416,6 +2074,9 @@ static bool finish_live_recording(CivSwitchApp* app) {
     if(!text) {
         furi_mutex_release(app->live_record_mutex);
         return false;
+    }
+    if(app->live_recording) {
+        app->live_record_elapsed_ms = furi_get_tick() - app->live_record_started_tick;
     }
     if(app->live_recording && app->live_record_has_state) {
         live_record_append_step_locked(
@@ -1495,6 +2156,7 @@ static void load_selected_macro(CivSwitchApp* app) {
         app->steps = NULL;
     }
     app->step_count = 0;
+    app->macro_total_ms = 0U;
     app->load_error_line = 0;
     if(app->macro_count == 0U || app->macro_index >= app->macro_count) {
         app->load_error = MacroLoadMissing;
@@ -1506,6 +2168,9 @@ static void load_selected_macro(CivSwitchApp* app) {
     if(app->load_error != MacroLoadOk) {
         snprintf(app->ui_message, sizeof(app->ui_message), "%s", macro_load_error_text(app->load_error));
     } else {
+        for(uint16_t i = 0U; i < app->step_count; i++) {
+            app->macro_total_ms += app->steps[i].duration_ms;
+        }
         app->ui_message[0] = '\0';
     }
 }
@@ -1514,6 +2179,7 @@ static void select_macro_named(CivSwitchApp* app, const char* name) {
     for(uint8_t i = 0U; i < app->macro_count; i++) {
         if(strcmp(app->macro_files[i].name, name) == 0) {
             app->macro_index = i;
+            normalize_macro_list_offset(app);
             return;
         }
     }
@@ -1581,53 +2247,107 @@ static void begin_macro_rename(CivSwitchApp* app) {
     if(base_length > MACRO_BASENAME_MAX) return;
     memcpy(app->rename_name, filename, base_length);
     app->rename_name[base_length] = '\0';
-    app->rename_position = 0U;
-    app->rename_end_selected = false;
-    app->rename_character = app->rename_name[0] ? app->rename_name[0] : 'A';
+    app->rename_position = base_length;
+    app->rename_keyboard_row = 0U;
+    app->rename_keyboard_column = 0U;
+    app->rename_symbols = false;
+    app->rename_cursor_selected = false;
     app->ui_message[0] = '\0';
     app->macro_ui_screen = MacroUiRename;
 }
 
-static void cycle_rename_character(CivSwitchApp* app, bool forward) {
-    static const char characters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
-    const size_t character_count = sizeof(characters) - 1U;
-    const size_t choice_count = character_count + 1U; // The final choice ends the filename here.
-    size_t choice = character_count;
-    if(!app->rename_end_selected) {
-        for(size_t i = 0U; i < character_count; i++) {
-            if(characters[i] == app->rename_character) {
-                choice = i;
-                break;
-            }
+static uint8_t nearest_rename_column(const CivSwitchApp* app, uint8_t row, uint8_t x) {
+    uint8_t key_count;
+    const RenameKey* keys = get_rename_keyboard_row(app, row, &key_count);
+    uint8_t best_column = 0U;
+    uint8_t best_distance = UINT8_MAX;
+    for(uint8_t column = 0U; column < key_count; column++) {
+        const uint8_t distance = keys[column].x > x ? keys[column].x - x : x - keys[column].x;
+        if(distance < best_distance) {
+            best_distance = distance;
+            best_column = column;
         }
     }
-    choice = forward ? (choice + 1U) % choice_count : (choice + choice_count - 1U) % choice_count;
-    app->rename_end_selected = choice == character_count;
-    if(!app->rename_end_selected) app->rename_character = characters[choice];
+    return best_column;
 }
 
-static void load_rename_character(CivSwitchApp* app) {
-    const size_t length = strlen(app->rename_name);
-    app->rename_end_selected = false;
-    app->rename_character = app->rename_position < length ? app->rename_name[app->rename_position] : 'A';
-}
-
-static void apply_rename_character(CivSwitchApp* app) {
-    size_t length = strlen(app->rename_name);
-    if(app->rename_end_selected) {
-        if(app->rename_position < length) app->rename_name[app->rename_position] = '\0';
-        load_rename_character(app);
+static void move_rename_vertical(CivSwitchApp* app, bool up) {
+    if(app->rename_cursor_selected) {
+        if(!up) app->rename_cursor_selected = false;
         return;
     }
-    if(app->rename_position < length) {
-        app->rename_name[app->rename_position] = app->rename_character;
-    } else if(app->rename_position < MACRO_BASENAME_MAX) {
-        app->rename_name[length] = app->rename_character;
-        app->rename_name[length + 1U] = '\0';
+
+    if(up && app->rename_keyboard_row == 0U) {
+        app->rename_cursor_selected = true;
+        return;
     }
-    length = strlen(app->rename_name);
-    if(app->rename_position < length) app->rename_position++;
-    load_rename_character(app);
+    if(!up && app->rename_keyboard_row == 2U) return;
+
+    uint8_t key_count;
+    const RenameKey* keys = get_rename_keyboard_row(
+        app, app->rename_keyboard_row, &key_count);
+    UNUSED(key_count);
+    const uint8_t target_x = keys[app->rename_keyboard_column].x;
+    app->rename_keyboard_row = up ? app->rename_keyboard_row - 1U : app->rename_keyboard_row + 1U;
+    app->rename_keyboard_column = nearest_rename_column(app, app->rename_keyboard_row, target_x);
+}
+
+static void move_rename_horizontal(CivSwitchApp* app, bool right) {
+    if(app->rename_cursor_selected) {
+        const size_t length = strlen(app->rename_name);
+        if(right && app->rename_position < length) app->rename_position++;
+        else if(!right && app->rename_position > 0U) app->rename_position--;
+        return;
+    }
+
+    uint8_t key_count;
+    (void)get_rename_keyboard_row(app, app->rename_keyboard_row, &key_count);
+    if(right) {
+        app->rename_keyboard_column = (app->rename_keyboard_column + 1U) % key_count;
+    } else {
+        app->rename_keyboard_column = (app->rename_keyboard_column + key_count - 1U) % key_count;
+    }
+}
+
+static void activate_rename_key(CivSwitchApp* app) {
+    if(app->rename_cursor_selected) {
+        app->rename_cursor_selected = false;
+        return;
+    }
+
+    uint8_t key_count;
+    const RenameKey* keys = get_rename_keyboard_row(app, app->rename_keyboard_row, &key_count);
+    if(app->rename_keyboard_column >= key_count) return;
+    const RenameKey* key = &keys[app->rename_keyboard_column];
+    if(key->action == RenameKeySymbols) {
+        const uint8_t previous_x = key->x;
+        app->rename_symbols = !app->rename_symbols;
+        app->rename_keyboard_column = nearest_rename_column(app, app->rename_keyboard_row, previous_x);
+    } else if(key->action == RenameKeySave) {
+        if(rename_selected_macro(app)) app->macro_ui_screen = MacroUiList;
+    } else if(key->action == RenameKeyBackspace) {
+        if(app->rename_position > 0U) {
+            const size_t position = app->rename_position;
+            memmove(
+                app->rename_name + position - 1U,
+                app->rename_name + position,
+                strlen(app->rename_name + position) + 1U);
+            app->rename_position--;
+            app->ui_message[0] = '\0';
+        }
+    } else {
+        const size_t length = strlen(app->rename_name);
+        if(length >= MACRO_BASENAME_MAX) {
+            snprintf(app->ui_message, sizeof(app->ui_message), "Name is too long");
+            return;
+        }
+        const char value = key->action == RenameKeySpace ? ' ' : key->value;
+        const size_t position = app->rename_position > length ? length : app->rename_position;
+        memmove(app->rename_name + position + 1U, app->rename_name + position, length - position + 1U);
+        app->rename_name[position] = value;
+        app->rename_position = position + 1U;
+        app->ui_message[0] = '\0';
+    }
 }
 
 static void start_macro_playback(CivSwitchApp* app) {
@@ -1637,6 +2357,9 @@ static void start_macro_playback(CivSwitchApp* app) {
         return;
     }
     app->stop_requested = false;
+    app->completed_steps = 0U;
+    app->macro_elapsed_ms = 0U;
+    app->macro_cycles = 0U;
     app->state = RunSending;
     app->worker = furi_thread_alloc();
     if(!app->worker) {
@@ -1651,18 +2374,174 @@ static void start_macro_playback(CivSwitchApp* app) {
     furi_thread_start(app->worker);
 }
 
+static uint8_t simulator_move_selection(uint8_t current, InputKey key) {
+    if(current >= SimulatorControlCount) return SimulatorControlA;
+
+    int16_t direction_x = 0;
+    int16_t direction_y = 0;
+    if(key == InputKeyUp) direction_y = -1;
+    else if(key == InputKeyDown) direction_y = 1;
+    else if(key == InputKeyLeft) direction_x = -1;
+    else if(key == InputKeyRight) direction_x = 1;
+    else return current;
+
+    const SimulatorControl* origin = &simulator_controls[current];
+    uint8_t best = current;
+    uint16_t best_score = 0xFFFFU;
+    for(uint8_t i = 0U; i < SimulatorControlCount; i++) {
+        if(i == current) continue;
+        const int16_t delta_x = (int16_t)simulator_controls[i].x - origin->x;
+        const int16_t delta_y = (int16_t)simulator_controls[i].y - origin->y;
+        const int16_t forward = delta_x * direction_x + delta_y * direction_y;
+        if(forward <= 0) continue;
+
+        const int16_t lateral = direction_x ? delta_y : delta_x;
+        const uint16_t score = (uint16_t)(forward + (lateral < 0 ? -lateral : lateral) * 2);
+        if(score < best_score) {
+            best_score = score;
+            best = i;
+        }
+    }
+    return best;
+}
+
+static bool simulator_selection_is_stick(uint8_t selection) {
+    return selection == SimulatorControlLeftStick || selection == SimulatorControlRightStick;
+}
+
+static bool simulator_adjust_stick(CivSwitchApp* app, InputKey key) {
+    if(!app->connected) {
+        app->simulator_error = true;
+        return false;
+    }
+
+    SwitchReport next = app->simulator_report;
+    uint8_t* horizontal = app->simulator_selection == SimulatorControlLeftStick ? &next.lx : &next.rx;
+    uint8_t* vertical = app->simulator_selection == SimulatorControlLeftStick ? &next.ly : &next.ry;
+    uint8_t* axis = NULL;
+    int16_t delta = 0;
+    if(key == InputKeyUp) {
+        axis = vertical;
+        delta = -(int16_t)SIMULATOR_STICK_STEP;
+    } else if(key == InputKeyDown) {
+        axis = vertical;
+        delta = SIMULATOR_STICK_STEP;
+    } else if(key == InputKeyLeft) {
+        axis = horizontal;
+        delta = -(int16_t)SIMULATOR_STICK_STEP;
+    } else if(key == InputKeyRight) {
+        axis = horizontal;
+        delta = SIMULATOR_STICK_STEP;
+    } else {
+        return false;
+    }
+
+    int16_t value = (int16_t)*axis + delta;
+    if(value < 0) value = 0;
+    if(value > 255) value = 255;
+    *axis = (uint8_t)value;
+    if(send_gamepad_report(app, next.buttons, next.hat, next.lx, next.ly, next.rx, next.ry)) {
+        app->simulator_report = next;
+        app->simulator_error = false;
+        return true;
+    }
+    app->simulator_error = true;
+    return false;
+}
+
+static void handle_simulator_input(CivSwitchApp* app, InputKey key, bool repeat) {
+    if(key == InputKeyUp || key == InputKeyDown || key == InputKeyLeft || key == InputKeyRight) {
+        if(app->simulator_stick_active && simulator_selection_is_stick(app->simulator_selection)) {
+            simulator_adjust_stick(app, key);
+        } else if(!repeat) {
+            app->simulator_selection = simulator_move_selection(app->simulator_selection, key);
+        }
+    } else if(key == InputKeyOk) {
+        if(repeat) return;
+        if(simulator_selection_is_stick(app->simulator_selection)) {
+            app->simulator_stick_active = !app->simulator_stick_active;
+            return;
+        }
+        if(!app->connected) {
+            app->simulator_error = true;
+            return;
+        }
+
+        const SimulatorControl* control = &simulator_controls[app->simulator_selection];
+        SwitchReport next = app->simulator_report;
+        if(control->button) {
+            next.buttons |= control->button;
+        } else {
+            next.hat = control->hat;
+        }
+
+        if(send_gamepad_report(app, next.buttons, next.hat, next.lx, next.ly, next.rx, next.ry)) {
+            app->simulator_report = next;
+            app->simulator_held_control = app->simulator_selection;
+            app->simulator_error = false;
+        } else {
+            app->simulator_error = true;
+        }
+    } else if(key == InputKeyBack) {
+        if(app->connected &&
+           send_gamepad_report(app, 0U, SWITCH_HAT_NONE, 0x80U, 0x80U, 0x80U, 0x80U)) {
+            wait_report_complete(app, EP_GAMEPAD_IN);
+        }
+        app->simulator_report = neutral_gamepad();
+        app->simulator_held_control = SIMULATOR_NO_CONTROL;
+        app->simulator_stick_active = false;
+        app->simulator_error = false;
+        app->macro_ui_screen = MacroUiHome;
+    }
+}
+
+static void release_simulator_button(CivSwitchApp* app, InputKey key) {
+    if(key != InputKeyOk || app->simulator_held_control >= SimulatorControlCount) return;
+
+    const SimulatorControl* control = &simulator_controls[app->simulator_held_control];
+    SwitchReport next = app->simulator_report;
+    if(control->button) {
+        next.buttons &= (uint16_t)~control->button;
+    } else if(next.hat == control->hat) {
+        next.hat = SWITCH_HAT_NONE;
+    }
+    app->simulator_held_control = SIMULATOR_NO_CONTROL;
+
+    if(app->connected &&
+       send_gamepad_report(app, next.buttons, next.hat, next.lx, next.ly, next.rx, next.ry)) {
+        app->simulator_report = next;
+        app->simulator_error = false;
+    } else {
+        app->simulator_error = true;
+    }
+}
+
 static void handle_macro_ui_input(CivSwitchApp* app, InputKey key, bool* running) {
     if(app->macro_ui_screen == MacroUiHome) {
-        if(key == InputKeyUp || key == InputKeyDown) {
-            app->home_index = (app->home_index + 1U) % 2U;
+        if(key == InputKeyUp) {
+            app->home_index = (app->home_index + 2U) % 3U;
+        } else if(key == InputKeyDown) {
+            app->home_index = (app->home_index + 1U) % 3U;
         } else if(key == InputKeyOk && app->home_index == 0U) {
             app->live_start_failed = false;
             refresh_macro_files(app);
             if(app->live_record_saved) select_macro_named(app, app->live_record_saved_name);
             load_selected_macro(app);
             app->macro_ui_screen = MacroUiList;
-        } else if(key == InputKeyOk) {
+        } else if(key == InputKeyOk && app->home_index == 1U) {
             app->live_start_failed = !start_live_mode(app);
+        } else if(key == InputKeyOk) {
+            if(app->connected) {
+                app->simulator_report = neutral_gamepad();
+                app->simulator_selection = SimulatorControlA;
+                app->simulator_held_control = SIMULATOR_NO_CONTROL;
+                app->simulator_error = false;
+                app->simulator_stick_active = false;
+                app->ui_message[0] = '\0';
+                app->macro_ui_screen = MacroUiSimulator;
+            } else {
+                snprintf(app->ui_message, sizeof(app->ui_message), "USB controller not ready");
+            }
         } else if(key == InputKeyBack) {
             *running = false;
         }
@@ -1673,14 +2552,35 @@ static void handle_macro_ui_input(CivSwitchApp* app, InputKey key, bool* running
             } else {
                 app->macro_index = (app->macro_index + 1U) % app->macro_count;
             }
+            normalize_macro_list_offset(app);
+            app->macro_loop = false;
+            app->macro_detail_selection = 1U;
             load_selected_macro(app);
         } else if(key == InputKeyOk) {
-            start_macro_playback(app);
+            if(app->load_error == MacroLoadOk) {
+                app->macro_detail_selection = 1U;
+                app->macro_ui_screen = MacroUiDetails;
+            }
         } else if(key == InputKeyRight && app->macro_count > 0U) {
             app->macro_action_index = 0U;
             app->macro_ui_screen = MacroUiActions;
         } else if(key == InputKeyBack) {
             app->macro_ui_screen = MacroUiHome;
+        }
+    } else if(app->macro_ui_screen == MacroUiDetails) {
+        if(key == InputKeyUp || key == InputKeyDown) {
+            app->macro_detail_selection = (app->macro_detail_selection + 1U) % 2U;
+        } else if(key == InputKeyOk) {
+            if(app->macro_detail_selection == 0U) {
+                app->macro_loop = !app->macro_loop;
+            } else {
+                start_macro_playback(app);
+            }
+        } else if(key == InputKeyRight) {
+            app->macro_action_index = 0U;
+            app->macro_ui_screen = MacroUiActions;
+        } else if(key == InputKeyBack) {
+            app->macro_ui_screen = MacroUiList;
         }
     } else if(app->macro_ui_screen == MacroUiActions) {
         if(key == InputKeyUp) {
@@ -1701,17 +2601,13 @@ static void handle_macro_ui_input(CivSwitchApp* app, InputKey key, bool* running
         }
     } else if(app->macro_ui_screen == MacroUiRename) {
         if(key == InputKeyUp || key == InputKeyDown) {
-            cycle_rename_character(app, key == InputKeyUp);
+            move_rename_vertical(app, key == InputKeyUp);
         } else if(key == InputKeyLeft) {
-            if(app->rename_position > 0U) app->rename_position--;
-            load_rename_character(app);
+            move_rename_horizontal(app, false);
         } else if(key == InputKeyRight) {
-            apply_rename_character(app);
+            move_rename_horizontal(app, true);
         } else if(key == InputKeyOk) {
-            if(app->rename_position < strlen(app->rename_name) || app->rename_end_selected) {
-                apply_rename_character(app);
-            }
-            if(rename_selected_macro(app)) app->macro_ui_screen = MacroUiList;
+            activate_rename_key(app);
         } else if(key == InputKeyBack) {
             app->macro_ui_screen = MacroUiActions;
         }
@@ -1722,6 +2618,8 @@ static void handle_macro_ui_input(CivSwitchApp* app, InputKey key, bool* running
         } else if(key == InputKeyBack || key == InputKeyLeft) {
             app->macro_ui_screen = MacroUiActions;
         }
+    } else if(app->macro_ui_screen == MacroUiSimulator) {
+        handle_simulator_input(app, key, false);
     }
 }
 
@@ -1729,15 +2627,31 @@ static void handle_input(CivSwitchApp* app, InputKey key, bool* running) {
     if(app->state == RunReady) {
         handle_macro_ui_input(app, key, running);
     } else if(app->state == RunLive) {
-        if(key == InputKeyOk) {
-            if(app->live_recording || app->live_record_full) {
-                finish_live_recording(app);
-            } else if(!start_live_recording(app)) {
-                snprintf(app->ui_message, sizeof(app->ui_message), "Record unavailable");
+        if(app->live_ui_screen == LiveUiMenu) {
+            if(key == InputKeyOk) {
+                app->live_recorder_selection = 0U;
+                app->live_ui_screen = LiveUiRecorder;
+            } else if(key == InputKeyBack) {
+                stop_live_mode(app);
+                app->state = RunReady;
+            }
+        } else if(app->live_ui_screen == LiveUiRecorder) {
+            if(key == InputKeyUp || key == InputKeyDown) {
+                app->live_recorder_selection = (uint8_t)(1U - app->live_recorder_selection);
+            } else if(key == InputKeyOk) {
+                if(app->live_recorder_selection == 1U) {
+                    app->live_controller_return_screen = LiveUiRecorder;
+                    app->live_ui_screen = LiveUiController;
+                } else if(app->live_recording || app->live_record_full) {
+                    finish_live_recording(app);
+                } else if(!start_live_recording(app)) {
+                    snprintf(app->ui_message, sizeof(app->ui_message), "Record unavailable");
+                }
+            } else if(key == InputKeyBack) {
+                app->live_ui_screen = LiveUiMenu;
             }
         } else if(key == InputKeyBack) {
-            stop_live_mode(app);
-            app->state = RunReady;
+            app->live_ui_screen = app->live_controller_return_screen;
         }
     } else if(key == InputKeyBack) {
         if(app->state == RunSending) {
@@ -1759,27 +2673,32 @@ static void handle_input(CivSwitchApp* app, InputKey key, bool* running) {
 static int32_t macro_worker(void* ctx) {
     CivSwitchApp* app = ctx;
     app->state = RunSending;
-    app->completed_steps = 0;
     app->failed_endpoint = 0;
     app->tx_failure = TxFailureNone;
     app->usb_result = 0;
 
     bool failed = false;
-    for(uint16_t i = 0; i < app->step_count && !app->stop_requested; i++) {
-        const MacroStep* step = &app->steps[i];
-        if(!send_gamepad_report(
-               app, step->buttons, step->hat, step->lx, step->ly, step->rx, step->ry)) {
-            failed = true;
-            break;
+    do {
+        app->completed_steps = 0U;
+        app->macro_elapsed_ms = 0U;
+        for(uint16_t i = 0; i < app->step_count && !app->stop_requested; i++) {
+            const MacroStep* step = &app->steps[i];
+            if(!send_gamepad_report(
+                   app, step->buttons, step->hat, step->lx, step->ly, step->rx, step->ry)) {
+                failed = true;
+                break;
+            }
+            if(!delay_or_cancel(app, step->duration_ms)) break;
+            if(!step->state_mode && !send_gamepad_report(app, 0, SWITCH_HAT_NONE, 0x80, 0x80, 0x80, 0x80)) {
+                failed = true;
+                break;
+            }
+            app->completed_steps = i + 1U;
+            view_port_update(app->view_port);
         }
-        if(!delay_or_cancel(app, step->duration_ms)) break;
-        if(!step->state_mode && !send_gamepad_report(app, 0, SWITCH_HAT_NONE, 0x80, 0x80, 0x80, 0x80)) {
-            failed = true;
-            break;
-        }
-        app->completed_steps = i + 1U;
-        view_port_update(app->view_port);
-    }
+        if(failed || app->stop_requested) break;
+        app->macro_cycles++;
+    } while(app->macro_loop);
 
     if(app->connected && app->usb_dev) {
         const bool pad_queued = send_gamepad_report(app, 0, SWITCH_HAT_NONE, 0x80, 0x80, 0x80, 0x80);
@@ -1818,9 +2737,19 @@ int32_t civswitch_app(void* p) {
 
     bool running = true;
     while(running) {
+        service_controller_wake(&app);
         InputEvent event;
         if(furi_message_queue_get(app.input_queue, &event, 100) == FuriStatusOk) {
-            if(event.type == InputTypePress) handle_input(&app, event.key, &running);
+            if(event.type == InputTypePress) {
+                handle_input(&app, event.key, &running);
+            } else if(app.state == RunReady && app.macro_ui_screen == MacroUiSimulator) {
+                if(event.type == InputTypeRelease) {
+                    release_simulator_button(&app, event.key);
+                } else if(event.type == InputTypeRepeat && app.simulator_stick_active &&
+                          simulator_selection_is_stick(app.simulator_selection)) {
+                    handle_simulator_input(&app, event.key, true);
+                }
+            }
         }
         view_port_update(app.view_port);
     }

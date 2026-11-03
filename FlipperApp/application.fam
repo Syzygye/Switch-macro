@@ -5,6 +5,7 @@ App(
     entry_point="civswitch_app",
     stack_size=3 * 1024,
     fap_category="USB",
+    fap_icon="switch_macro.png",
     requires=["gui", "storage", "bt"],
     fap_version="0.5",
     fap_description="Manage SD macros and relay PC controller input over BLE to USB",

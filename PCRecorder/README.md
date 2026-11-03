@@ -8,7 +8,7 @@ Herramienta web local, sin dependencias, que lee un mando conectado al PC usando
 2. Conecta la Flipper por USB al dock, ejecuta **Switch Macro** y entra en **Live**.
 3. Ejecuta `start-local.cmd` en esta carpeta; abre la página en Chrome o Edge. Pulsa un botón del mando para que el navegador lo detecte y selecciónalo.
 4. Pulsa **Conectar Flipper por Bluetooth** y elige la Flipper. Confirma el emparejamiento si lo solicita.
-5. Al conectar la Flipper y el mando seleccionado, el relé se activa automáticamente. Si quieres guardar la sesión desde el PC, pulsa **Iniciar grabación**; detenerla no apaga el relé. También puedes grabar desde la propia Flipper mientras Live está activo: pulsa **OK** en su pantalla para iniciar/parar y guarda `live_NNNN.txt` en la microSD. Si detuviste el relé manualmente, pulsa **Reanudar relé**.
+5. Al conectar la Flipper y el mando seleccionado, el relé se activa automáticamente. Si quieres guardar la sesión desde el PC, pulsa **Iniciar grabación**; detenerla no apaga el relé. También puedes grabar desde la Flipper mientras Live sigue activo: abre **Recorder** en el menú Live y elige **START RECORDING**. **VIEW CONTROLLER** abre la vista grande del mando sin detener la grabación; **Atrás** vuelve a Recorder. **STOP AND SAVE** guarda la macro. Si detuviste el relé manualmente, pulsa **Reanudar relé**.
 
 ## Reproducir la grabación después
 
@@ -20,7 +20,7 @@ Una vez copiadas a la microSD, puedes elegir **Macros** desde el menú de la Fli
 
 La página y el servidor HTTP se ejecutan en el PC; `start-local.cmd` requiere Python 3. El servidor escucha solo en `127.0.0.1`; no envía datos a internet. Web Bluetooth requiere el origen local seguro preparado por `start-local.cmd`. Mantén la pestaña visible mientras el relé o la grabación estén activos. La primera conexión puede pedir confirmación de emparejamiento en la Flipper y el PC.
 
-El navegador debe exponer el mando con el mapeo estándar para identificar sus botones por posición; si indica otro mapeo, los nombres pueden variar. Se capturan botones, cruceta y sticks analógicos, con zona muerta y cuantización de ejes.
+El navegador debe exponer el mando con el mapeo estándar para identificar sus botones por posición; si indica otro mapeo, los nombres pueden variar. En el mapeo estándar, el botón central izquierdo (Select/Back) se guarda como `MINUS` y el central derecho (Start) como `PLUS`; L3/R3, Home y cruceta también se capturan. El botón Share/Capture se guarda como `CAPTURE` cuando el navegador lo expone como el botón 17. Se capturan además los sticks analógicos, con zona muerta y cuantización de ejes.
 
 La cruceta usa el mapa HID estándar, con izquierda=`0x06` y derecha=`0x02`.
 

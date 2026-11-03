@@ -1,0 +1,7 @@
+# Switch Macro: un paso por línea; duración en milisegundos.
+# Los botones se sueltan al terminar cada paso.
+A 120
+WAIT 250
+A+B 100
+UP 300
+L+UP_RIGHT 80

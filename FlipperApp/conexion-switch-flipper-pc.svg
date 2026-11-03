@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="820" viewBox="0 0 1440 820" role="img" aria-labelledby="title desc">
+  <title id="title">Conexión entre mando, PC, Flipper Zero y Nintendo Switch</title>
+  <desc id="desc">En Live, el mando va al PC, el PC envía estados por Bluetooth a la Flipper y la Flipper los transmite por USB a la Switch. Las macros guardadas en microSD se reproducen sin PC ni mando.</desc>
+  <defs>
+    <marker id="arrowBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M1 1 L11 6 L1 11 Z" fill="#69aefc"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M1 1 L11 6 L1 11 Z" fill="#5ee0a0"/>
+    </marker>
+    <marker id="arrowViolet" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M1 1 L11 6 L1 11 Z" fill="#c4a1ff"/>
+    </marker>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.24"/>
+    </filter>
+    <style>
+      text { font-family: Inter, "Segoe UI", Arial, sans-serif; }
+      .title { fill: #f4f7fb; font-size: 34px; font-weight: 700; }
+      .subtitle { fill: #a9b6c8; font-size: 17px; }
+      .device { fill: #111c2d; stroke: #34445c; stroke-width: 2; }
+      .device-title { fill: #f6f8fc; font-size: 21px; font-weight: 700; }
+      .device-sub { fill: #a9b6c8; font-size: 14px; }
+      .small { fill: #c7d2e1; font-size: 14px; }
+      .tiny { fill: #97a8bd; font-size: 12px; }
+      .tag { font-size: 13px; font-weight: 700; letter-spacing: .4px; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="820" fill="#09111f"/>
+  <circle cx="1220" cy="100" r="250" fill="#14243b" opacity=".25"/>
+  <circle cx="180" cy="730" r="270" fill="#15243a" opacity=".18"/>
+
+  <text x="72" y="72" class="title">Mando del PC en Nintendo Switch</text>
+  <text x="72" y="105" class="subtitle">La Flipper Zero hace de puente: recibe el mando por Bluetooth y se presenta a la consola como mando USB.</text>
+
+  <!-- Live path device cards -->
+  <g filter="url(#shadow)">
+    <rect class="device" x="72" y="190" width="260" height="210" rx="22"/>
+    <rect class="device" x="430" y="190" width="300" height="210" rx="22"/>
+    <rect class="device" x="830" y="165" width="300" height="260" rx="22"/>
+    <rect class="device" x="1230" y="190" width="150" height="210" rx="22"/>
+  </g>
+
+  <!-- Controller icon -->
+  <g transform="translate(126 238)" fill="none" stroke="#8fbaff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M23 17h113c18 0 32 13 36 31l13 55c4 17-16 28-28 16l-27-27H54l-27 27c-12 12-32 1-28-16l13-55c4-18 13-31 34-31z"/>
+    <path d="M49 49v34M32 66h34"/>
+    <circle cx="133" cy="57" r="5" fill="#8fbaff"/>
+    <circle cx="151" cy="73" r="5" fill="#8fbaff"/>
+    <circle cx="115" cy="73" r="5" fill="#8fbaff"/>
+    <circle cx="133" cy="89" r="5" fill="#8fbaff"/>
+  </g>
+  <text x="202" y="355" text-anchor="middle" class="device-title">Mando</text>
+  <text x="202" y="378" text-anchor="middle" class="device-sub">USB o Bluetooth al PC</text>
+
+  <!-- PC icon -->
+  <g transform="translate(519 226)" fill="none" stroke="#69aefc" stroke-width="4" stroke-linejoin="round">
+    <rect x="0" y="0" width="122" height="82" rx="8"/>
+    <path d="M51 83v20m-26 0h75M13 15h96v52H13z"/>
+    <circle cx="61" cy="41" r="12" fill="#69aefc" stroke="none" opacity=".85"/>
+  </g>
+  <text x="580" y="355" text-anchor="middle" class="device-title">PC</text>
+  <text x="580" y="378" text-anchor="middle" class="device-sub">Navegador + PCRecorder</text>
+
+  <!-- Flipper icon -->
+  <g transform="translate(928 194)">
+    <rect x="0" y="0" width="105" height="150" rx="17" fill="#27364a" stroke="#7e91aa" stroke-width="3"/>
+    <rect x="12" y="16" width="81" height="59" rx="6" fill="#07111e" stroke="#4a617d" stroke-width="2"/>
+    <text x="52" y="42" text-anchor="middle" fill="#5ee0a0" font-size="11" font-weight="700">LIVE</text>
+    <path d="M32 57h40" stroke="#5ee0a0" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="24" cy="101" r="6" fill="#a7b6c8"/>
+    <circle cx="52" cy="101" r="6" fill="#a7b6c8"/>
+    <circle cx="80" cy="101" r="6" fill="#a7b6c8"/>
+    <circle cx="52" cy="128" r="6" fill="#a7b6c8"/>
+  </g>
+  <text x="980" y="371" text-anchor="middle" class="device-title">Flipper Zero</text>
+  <text x="980" y="394" text-anchor="middle" class="device-sub">Switch Macro · Live</text>
+
+  <!-- Switch / dock icon -->
+  <g transform="translate(1267 236)">
+    <rect x="0" y="0" width="76" height="112" rx="12" fill="#1c2b40" stroke="#91a3b9" stroke-width="3"/>
+    <rect x="8" y="11" width="60" height="85" rx="4" fill="#070d16" stroke="#546a84" stroke-width="2"/>
+    <path d="M20 112h36l9 18H11z" fill="#2d4059" stroke="#91a3b9" stroke-width="3"/>
+    <circle cx="38" cy="104" r="2.5" fill="#5ee0a0"/>
+  </g>
+  <text x="1305" y="378" text-anchor="middle" class="device-title" font-size="16">Switch / Switch 2</text>
+  <text x="1305" y="397" text-anchor="middle" class="tiny">en el dock</text>
+
+  <!-- Live arrows -->
+  <path d="M335 295H415" fill="none" stroke="#93a5bb" stroke-width="4" marker-end="url(#arrowBlue)"/>
+  <rect x="336" y="248" width="91" height="31" rx="15" fill="#16253a" stroke="#344962"/>
+  <text x="381" y="268" text-anchor="middle" class="tag" fill="#c7d2e1">USB / BT</text>
+  <text x="375" y="326" text-anchor="middle" class="tiny">entradas del mando</text>
+
+  <path d="M735 295H815" fill="none" stroke="#69aefc" stroke-width="5" marker-end="url(#arrowBlue)"/>
+  <rect x="731" y="248" width="103" height="31" rx="15" fill="#102744" stroke="#31577e"/>
+  <text x="782" y="268" text-anchor="middle" class="tag" fill="#8fc4ff">BLE</text>
+  <text x="775" y="326" text-anchor="middle" class="tiny">estados del mando</text>
+
+  <path d="M1135 295H1215" fill="none" stroke="#5ee0a0" stroke-width="5" marker-end="url(#arrowGreen)"/>
+  <rect x="1128" y="248" width="101" height="31" rx="15" fill="#102b28" stroke="#28644f"/>
+  <text x="1178" y="268" text-anchor="middle" class="tag" fill="#76efb4">USB HID</text>
+  <text x="1175" y="326" text-anchor="middle" class="tiny">mando virtual</text>
+
+  <!-- Macro standalone path -->
+  <rect x="72" y="500" width="1308" height="220" rx="24" fill="#101a2a" stroke="#34445c" stroke-width="2"/>
+  <text x="108" y="548" fill="#f4f7fb" font-size="23" font-weight="700">Reproducir una macro guardada</text>
+  <text x="108" y="577" class="device-sub">Este recorrido funciona solo con la Flipper conectada a la Switch.</text>
+
+  <rect x="110" y="614" width="274" height="64" rx="14" fill="#1a263a" stroke="#4c607b" stroke-width="2"/>
+  <text x="247" y="640" text-anchor="middle" fill="#e7d9ff" font-size="16" font-weight="700">microSD en la Flipper</text>
+  <text x="247" y="662" text-anchor="middle" class="tiny">live_0001.txt · otras macros</text>
+
+  <path d="M395 646H575" fill="none" stroke="#c4a1ff" stroke-width="5" marker-end="url(#arrowViolet)"/>
+  <text x="485" y="626" text-anchor="middle" class="tag" fill="#d7c2ff">seleccionar y reproducir</text>
+
+  <rect x="590" y="614" width="254" height="64" rx="14" fill="#1a263a" stroke="#4c607b" stroke-width="2"/>
+  <text x="717" y="640" text-anchor="middle" fill="#f4f7fb" font-size="16" font-weight="700">Flipper Zero</text>
+  <text x="717" y="662" text-anchor="middle" class="tiny">envía los estados de la macro</text>
+
+  <path d="M855 646H1090" fill="none" stroke="#5ee0a0" stroke-width="5" marker-end="url(#arrowGreen)"/>
+  <text x="972" y="626" text-anchor="middle" class="tag" fill="#76efb4">USB HID</text>
+
+  <rect x="1105" y="614" width="225" height="64" rx="14" fill="#1a263a" stroke="#4c607b" stroke-width="2"/>
+  <text x="1217" y="640" text-anchor="middle" fill="#f4f7fb" font-size="15" font-weight="700">Switch / Switch 2</text>
+  <text x="1217" y="662" text-anchor="middle" class="tiny">sin PC ni mando externo</text>
+
+  <text x="72" y="776" class="tiny">LIVE: Mando → PC → BLE → Flipper → USB → Switch</text>
+  <text x="792" y="776" class="tiny">MACRO: microSD → Flipper → USB → Switch</text>
+</svg>

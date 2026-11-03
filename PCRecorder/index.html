@@ -103,12 +103,6 @@
 </head>
 <body>
   <main>
-    <header>
-      <div class="eyebrow">Switch Macro · herramienta local</div>
-      <h1>Graba el mando.<br>Reprodúcelo con la Flipper.</h1>
-      <p>Captura un mando del PC, lo retransmite por Bluetooth al Flipper para jugar en la Switch y exporta un <code>macros.txt</code> para repetir la secuencia después sin PC ni mando.</p>
-    </header>
-
     <section class="card" aria-labelledby="capture-title">
       <h2 id="capture-title">1. Selecciona el mando</h2>
       <div class="row">
@@ -286,6 +280,10 @@
         if (pad.buttons[16]?.pressed) {
           controls.push('HOME');
           buttonsMask |= 0x1000;
+        }
+        if (pad.buttons[17]?.pressed) {
+          controls.push('CAPTURE');
+          buttonsMask |= 0x2000;
         }
 
         const up = Boolean(pad.buttons[12]?.pressed);
