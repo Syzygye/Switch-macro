@@ -1,7 +1,0 @@
-Initial release bundle for Switch Macro (pre-feature update).
-
-Included binaries:
-- SwitchMacro.fap: Flipper Zero Target 7, API 88.2.
-- PCRecorder.zip: standalone local browser app; PCRecorder is a static web application and has no separate compiled binary.
-
-PicoSwitch UF2 is not part of this Flipper/PC app release. The current workspace has no built PicoSwitch UF2 and no Pico SDK/CMake/Ninja/ARM GCC toolchain available.
