@@ -1,3 +1,6 @@
+<img width="2880" height="1640" alt="conexion-switch-flipper-pc" src="https://github.com/user-attachments/assets/723d6f55-a9db-4b1a-8dac-ca8286c92f59" />
+
+
 Usa tu Flipper Zero como puente USB/Bluetooth para jugar en Nintendo Switch y Switch 2 con un mando conectado al PC. Graba macros desde el Flipper zero y reprodúcelas después sin PC ni mando.
 
 Copia SwitchMacro.fap a apps/USB/ en la microSD, conecta la Flipper al dock y abre la app.
