@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Grabador de macros | Switch Macro</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #10141c;
+      --panel: #191f2a;
+      --panel-2: #202938;
+      --border: #303b4d;
+      --text: #edf2f8;
+      --muted: #9ba9bc;
+      --accent: #8be0c0;
+      --accent-ink: #10241d;
+      --danger: #ffb2a8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 38px 18px 56px;
+      background: radial-gradient(ellipse at 15% 0%, #1b2a38 0, var(--bg) 46rem);
+      color: var(--text);
+      font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    main { width: min(900px, 100%); margin: 0 auto; }
+    header { margin-bottom: 24px; }
+    .eyebrow { color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+    h1 { margin: 7px 0 8px; font-size: clamp(28px, 5vw, 42px); line-height: 1.08; letter-spacing: -.035em; }
+    p { margin: 0; color: var(--muted); }
+    .card {
+      margin-top: 16px;
+      padding: 20px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: color-mix(in srgb, var(--panel) 94%, transparent);
+      box-shadow: 0 16px 44px #0002;
+    }
+    h2 { margin: 0 0 13px; font-size: 17px; }
+    label { display: block; margin-bottom: 7px; color: var(--muted); font-size: 13px; }
+    select, textarea {
+      width: 100%;
+      color: var(--text);
+      background: #0f141c;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font: inherit;
+    }
+    select { min-height: 44px; padding: 0 12px; }
+    textarea {
+      min-height: 270px;
+      padding: 14px;
+      resize: vertical;
+      color: #d8f1e8;
+      font: 13px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
+      tab-size: 2;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .row > .grow { flex: 1 1 280px; }
+    .controls { margin-top: 12px; }
+    button {
+      min-height: 42px;
+      padding: 0 15px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel-2);
+      color: var(--text);
+      font: inherit;
+      font-weight: 650;
+      cursor: pointer;
+    }
+    button.primary { border-color: transparent; background: var(--accent); color: var(--accent-ink); }
+    button.stop { border-color: #653a3b; color: var(--danger); }
+    button:disabled { opacity: .42; cursor: not-allowed; }
+    .status {
+      display: flex;
+      gap: 9px;
+      align-items: center;
+      min-height: 28px;
+      margin: 12px 0 2px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: #647184; }
+    .dot.live { background: #ff7668; box-shadow: 0 0 0 4px #ff766822; }
+    .status.error { color: var(--danger); }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 10px; color: var(--muted); font-size: 12px; }
+    .tag { padding: 3px 8px; border: 1px solid var(--border); border-radius: 999px; background: #10151d; }
+    .instructions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
+    .step { padding: 14px; border-radius: 12px; background: var(--panel-2); color: var(--muted); font-size: 13px; }
+    .step strong { display: block; margin-bottom: 5px; color: var(--text); }
+    code { color: #c5f3e1; font: .95em ui-monospace, SFMono-Regular, Consolas, monospace; }
+    @media (max-width: 650px) {
+      body { padding: 25px 13px 40px; }
+      .card { padding: 16px; }
+      .instructions { grid-template-columns: 1fr; }
+      .controls button { flex: 1 1 42%; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow">Switch Macro · herramienta local</div>
+      <h1>Graba el mando.<br>Reprodúcelo con la Flipper.</h1>
+      <p>Captura un mando del PC, lo retransmite por Bluetooth al Flipper para jugar en la Switch y exporta un <code>macros.txt</code> para repetir la secuencia después sin PC ni mando.</p>
+    </header>
+
+    <section class="card" aria-labelledby="capture-title">
+      <h2 id="capture-title">1. Selecciona el mando</h2>
+      <div class="row">
+        <div class="grow">
+          <label for="gamepad">Mando detectado</label>
+          <select id="gamepad"><option value="">Conecta el mando y pulsa un botón…</option></select>
+        </div>
+        <button id="refresh" type="button">Actualizar lista</button>
+      </div>
+      <div class="meta">
+        <span class="tag">Chrome o Edge</span>
+        <span class="tag">USB o Bluetooth al PC</span>
+        <span class="tag">No sube datos a internet</span>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="flipper-title">
+      <h2 id="flipper-title">2. Conecta la Flipper</h2>
+      <p>Conecta la Flipper por USB al dock y abre <strong>Switch Macro → Live</strong>. Después enlázala aquí por Bluetooth. El relé arranca automáticamente cuando estén conectados la Flipper y el mando.</p>
+      <div class="row controls">
+        <button class="primary" id="connect-flipper" type="button">Conectar Flipper por Bluetooth</button>
+        <span class="tag" id="ble-status" role="status">Flipper sin conectar</span>
+      </div>
+      <p style="margin-top:10px">Web Bluetooth requiere abrir la página desde <code>start-local.cmd</code> en Chrome o Edge. La primera conexión puede pedir confirmación de emparejamiento en la Flipper y el PC.</p>
+    </section>
+
+    <section class="card" aria-labelledby="record-title">
+      <h2 id="record-title">3. Juega y graba si quieres</h2>
+      <p>Deja esta pestaña visible. El relé se activa automáticamente al conectar la Flipper y el mando; la grabación es independiente. Si detienes el relé, puedes reanudarlo con el botón. En el mapeo estándar, abajo→B, derecha→A, izquierda→Y y arriba→X.</p>
+      <div class="row controls">
+        <button class="primary" id="start-relay" type="button" disabled>▶ Reanudar relé</button>
+        <button class="stop" id="stop-relay" type="button" disabled>■ Detener relé</button>
+      </div>
+      <div class="row controls">
+        <button class="primary" id="start" type="button" disabled>● Iniciar grabación</button>
+        <button class="stop" id="stop" type="button" disabled>■ Detener grabación</button>
+        <button id="clear" type="button" disabled>Vaciar</button>
+        <button class="primary" id="download" type="button" disabled>Descargar macros.txt</button>
+      </div>
+      <div class="status" id="status" role="status" aria-live="polite">
+        <span class="dot" id="dot"></span><span id="status-text">Conecta el mando, pulsa un botón y selecciónalo.</span>
+      </div>
+      <div class="meta" id="counts"><span>Pasos: 0 / 512</span><span>Tamaño: 0 / 24576 bytes</span></div>
+      <label for="output" style="margin-top:14px">Vista previa del archivo</label>
+      <textarea id="output" spellcheck="false" readonly># Graba una secuencia para generar macros.txt
+# Formato: STATE botones+ejes duración_ms
+</textarea>
+    </section>
+
+    <section class="instructions" aria-label="Cómo reproducir después">
+      <div class="step"><strong>4. Copia el archivo</strong>Descarga <code>macros.txt</code> y guárdalo en <code>/ext/apps_data/switch_macro/</code> de la microSD.</div>
+      <div class="step"><strong>5. Deja el PC</strong>Desconecta el PC y el mando. La Flipper ya tiene el archivo de la macro.</div>
+      <div class="step"><strong>6. Reproduce</strong>Abre Switch Macro, entra en Macros y elige el archivo. Atrás detiene la macro.</div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const MAX_STEPS = 512;
+      const MAX_BYTES = 24576;
+      const MAX_DURATION_MS = 60000;
+      const SERIAL_SERVICE_UUID = '8fe5b3d5-2e7f-4a98-2a48-7acc60fe0000';
+      const SERIAL_RX_UUID = '19ed82ae-ed21-4c9d-4145-228e62fe0000';
+      const LIVE_FRAME_MAGIC = 0xC7;
+      const LIVE_FRAME_SIZE = 9;
+      const HEADER = '# Grabado con PCRecorder para Switch Macro\n# STATE conserva botones/ejes durante cada intervalo; NONE significa todo suelto.\n';
+      const buttonNames = [
+        [0, 'B', 0x0002], [1, 'A', 0x0004], [2, 'Y', 0x0001], [3, 'X', 0x0008],
+        [4, 'L', 0x0010], [5, 'R', 0x0020], [6, 'ZL', 0x0040], [7, 'ZR', 0x0080],
+        [8, 'MINUS', 0x0100], [9, 'PLUS', 0x0200], [10, 'L3', 0x0400], [11, 'R3', 0x0800],
+      ];
+      const axisNames = ['LX', 'LY', 'RX', 'RY'];
+      const $ = (id) => document.getElementById(id);
+      const picker = $('gamepad');
+      const output = $('output');
+      let segments = [];
+      let recording = false;
+      let relaying = false;
+      let relayPaused = false;
+      let selectedIndex = null;
+      let previousState = null;
+      let segmentStart = 0;
+      let animation = 0;
+      let pollScheduled = false;
+      let truncated = false;
+      let flipperDevice = null;
+      let flipperServer = null;
+      let flipperRx = null;
+      let pendingRelayFrame = null;
+      let bleWriteRunning = false;
+      let lastRelayAt = 0;
+
+      function setStatus(message, options = {}) {
+        $('status-text').textContent = message;
+        $('status').classList.toggle('error', Boolean(options.error));
+        $('dot').classList.toggle('live', recording);
+      }
+
+      function setBleStatus(message, error = false) {
+        const status = $('ble-status');
+        status.textContent = message;
+        status.style.color = error ? 'var(--danger)' : 'var(--muted)';
+      }
+
+      function gamepads() {
+        if (!navigator.getGamepads) return [];
+        return Array.from(navigator.getGamepads()).filter(Boolean);
+      }
+
+      function updateRelayButtons() {
+        const selectedPadExists = Number.isInteger(selectedIndex) &&
+          gamepads().some((pad) => pad.index === selectedIndex);
+        $('start-relay').disabled = relaying || !selectedPadExists || !flipperRx;
+        $('stop-relay').disabled = !relaying;
+      }
+
+      function ensurePolling() {
+        if (!pollScheduled && (recording || relaying)) {
+          pollScheduled = true;
+          animation = requestAnimationFrame(poll);
+        }
+      }
+
+      function stopPolling() {
+        if (pollScheduled) cancelAnimationFrame(animation);
+        pollScheduled = false;
+      }
+
+      function refreshGamepads() {
+        if (recording || relaying) return;
+        const available = gamepads();
+        const oldIndex = picker.value;
+        picker.replaceChildren();
+        if (!available.length) {
+          picker.add(new Option('Conecta el mando y pulsa un botón…', ''));
+          selectedIndex = null;
+          $('start').disabled = true;
+          updateRelayButtons();
+          setStatus('Conecta el mando al PC y pulsa un botón para que el navegador lo detecte.');
+          return;
+        }
+        for (const pad of available) {
+          const label = `${pad.id || 'Mando'} · #${pad.index} · ${pad.mapping || 'mapeo no estándar'}`;
+          picker.add(new Option(label, String(pad.index)));
+        }
+        if (available.some((pad) => String(pad.index) === oldIndex)) picker.value = oldIndex;
+        else picker.selectedIndex = 0;
+        selectedIndex = Number(picker.value);
+        $('start').disabled = !Number.isInteger(selectedIndex);
+        updateRelayButtons();
+        if (available.some((pad) => pad.mapping !== 'standard')) {
+          setStatus('Mando detectado. El mapeo no estándar puede cambiar el nombre de los botones.');
+        } else {
+          setStatus('Mando detectado. Ya puedes grabar.');
+        }
+        maybeStartRelay();
+      }
+
+      function quantizedAxis(value) {
+        if (!Number.isFinite(value) || Math.abs(value) < 0.12) return 128;
+        const normalized = Math.max(-1, Math.min(1, value));
+        const raw = Math.round((normalized + 1) * 127.5);
+        return Math.max(0, Math.min(255, Math.round(raw / 4) * 4));
+      }
+
+      function readState(pad) {
+        const controls = [];
+        let buttonsMask = 0;
+        for (const [index, name, mask] of buttonNames) {
+          if (pad.buttons[index]?.pressed) {
+            controls.push(name);
+            buttonsMask |= mask;
+          }
+        }
+        if (pad.buttons[16]?.pressed) {
+          controls.push('HOME');
+          buttonsMask |= 0x1000;
+        }
+
+        const up = Boolean(pad.buttons[12]?.pressed);
+        const down = Boolean(pad.buttons[13]?.pressed);
+        const left = Boolean(pad.buttons[14]?.pressed);
+        const right = Boolean(pad.buttons[15]?.pressed);
+        const vertical = up === down ? '' : (up ? 'UP' : 'DOWN');
+        const horizontal = left === right ? '' : (left ? 'LEFT' : 'RIGHT');
+        let hat = 0x08;
+        if (vertical && horizontal) {
+          controls.push(`${vertical}_${horizontal}`);
+          hat = { UP_LEFT: 0x07, UP_RIGHT: 0x01, DOWN_LEFT: 0x05, DOWN_RIGHT: 0x03 }[`${vertical}_${horizontal}`];
+        } else if (vertical || horizontal) {
+          const direction = vertical || horizontal;
+          controls.push(direction);
+          hat = { UP: 0x00, RIGHT: 0x02, DOWN: 0x04, LEFT: 0x06 }[direction];
+        }
+
+        const axes = [0x80, 0x80, 0x80, 0x80];
+        for (let index = 0; index < Math.min(4, pad.axes.length); index++) {
+          axes[index] = quantizedAxis(pad.axes[index]);
+        }
+        return { controls, axes, buttonsMask, hat };
+      }
+
+      function encodeLiveFrame(state) {
+        const frame = new Uint8Array(LIVE_FRAME_SIZE);
+        frame[0] = LIVE_FRAME_MAGIC;
+        frame[1] = state.buttonsMask & 0xff;
+        frame[2] = (state.buttonsMask >> 8) & 0xff;
+        frame[3] = state.hat;
+        frame[4] = state.axes[0];
+        frame[5] = state.axes[1];
+        frame[6] = state.axes[2];
+        frame[7] = state.axes[3];
+        for (let index = 1; index < LIVE_FRAME_SIZE - 1; index++) frame[8] ^= frame[index];
+        return frame;
+      }
+
+      function flushRelayWrites() {
+        if (bleWriteRunning || !pendingRelayFrame || !flipperRx) return;
+        bleWriteRunning = true;
+        void (async () => {
+          try {
+            while (pendingRelayFrame && flipperRx) {
+              const characteristic = flipperRx;
+              const frame = pendingRelayFrame;
+              pendingRelayFrame = null;
+              if (characteristic.writeValueWithoutResponse) {
+                await characteristic.writeValueWithoutResponse(frame);
+              } else {
+                await characteristic.writeValue(frame);
+              }
+            }
+          } catch (error) {
+            pendingRelayFrame = null;
+            setBleStatus(`Error al enviar por BLE: ${error.message}`, true);
+          } finally {
+            bleWriteRunning = false;
+            if (pendingRelayFrame && flipperRx) flushRelayWrites();
+          }
+        })();
+      }
+
+      function relayState(state) {
+        if (!flipperRx) return;
+        pendingRelayFrame = encodeLiveFrame(state);
+        flushRelayWrites();
+      }
+
+      function onFlipperDisconnected() {
+        flipperRx = null;
+        pendingRelayFrame = null;
+        flipperServer = null;
+        flipperDevice = null;
+        $('connect-flipper').textContent = 'Conectar Flipper por Bluetooth';
+        setBleStatus('Flipper desconectada; el FAP soltará los controles.');
+        if (relaying) stopRelay(false);
+        updateRelayButtons();
+        if (recording) {
+          setStatus('Flipper desconectada; la macro sigue grabándose, pero ya no llega a la Switch.', { error: true });
+        }
+      }
+
+      async function connectFlipper() {
+        if (flipperDevice?.gatt?.connected) {
+          flipperDevice.gatt.disconnect();
+          return;
+        }
+        if (!window.isSecureContext || !navigator.bluetooth) {
+          setBleStatus('Abre start-local.cmd en Chrome o Edge para habilitar Bluetooth.', true);
+          return;
+        }
+        try {
+          flipperDevice = await navigator.bluetooth.requestDevice({
+            acceptAllDevices: true,
+            optionalServices: [SERIAL_SERVICE_UUID],
+          });
+          flipperDevice.addEventListener('gattserverdisconnected', onFlipperDisconnected);
+          flipperServer = await flipperDevice.gatt.connect();
+          const service = await flipperServer.getPrimaryService(SERIAL_SERVICE_UUID);
+          flipperRx = await service.getCharacteristic(SERIAL_RX_UUID);
+          $('connect-flipper').textContent = 'Desconectar Flipper';
+          setBleStatus('Flipper enlazada. Activando relé…');
+          const neutral = { buttonsMask: 0, hat: 0x08, axes: [0x80, 0x80, 0x80, 0x80] };
+          relayPaused = false;
+          relayState(neutral);
+          updateRelayButtons();
+          maybeStartRelay();
+          if (!relaying) setBleStatus('Flipper enlazada; esperando al mando seleccionado.');
+        } catch (error) {
+          if (flipperDevice?.gatt?.connected) flipperDevice.gatt.disconnect();
+          flipperRx = null;
+          flipperServer = null;
+          flipperDevice = null;
+          setBleStatus(`No se pudo conectar: ${error.message}`, true);
+          updateRelayButtons();
+        }
+      }
+
+      function startRelay() {
+        const pad = gamepads().find((candidate) => candidate.index === selectedIndex);
+        if (!pad || !flipperRx) {
+          setStatus('Selecciona el mando y conecta la Flipper por Bluetooth.', { error: true });
+          return;
+        }
+        relayPaused = false;
+        relaying = true;
+        if (!recording) previousState = readState(pad);
+        lastRelayAt = performance.now();
+        relayState(readState(pad));
+        updateRelayButtons();
+        setStatus(recording
+          ? 'Relé activo; la grabación continúa por separado.'
+          : 'Relé activo. El mando ya controla la Switch; la grabación es opcional.');
+        setBleStatus('Flipper enlazada; relé activo.');
+        ensurePolling();
+      }
+
+      function maybeStartRelay() {
+        if (relayPaused || relaying || !flipperRx || !Number.isInteger(selectedIndex)) return;
+        if (gamepads().some((pad) => pad.index === selectedIndex)) startRelay();
+      }
+
+      function stopRelay(manual = true) {
+        if (!relaying) return;
+        if (manual) relayPaused = true;
+        relaying = false;
+        relayState({ buttonsMask: 0, hat: 0x08, axes: [0x80, 0x80, 0x80, 0x80] });
+        updateRelayButtons();
+        if (recording) {
+          setStatus('Relé detenido; la grabación continúa.');
+        } else {
+          stopPolling();
+          setStatus('Relé detenido.');
+        }
+        if (flipperRx) setBleStatus('Flipper enlazada; relé detenido.');
+      }
+
+      function stateSignature(state) {
+        return `${state.controls.join('+')}|${state.axes.join(',')}`;
+      }
+
+      function serializeSegment(state, duration) {
+        let controls = [...state.controls];
+        for (let index = 0; index < axisNames.length; index++) {
+          if (state.axes[index] !== 0x80) controls.push(`${axisNames[index]}:${state.axes[index]}`);
+        }
+        if (!controls.length) controls = ['NONE'];
+        return `STATE ${controls.join('+')} ${duration}`;
+      }
+
+      function currentText() {
+        return HEADER + segments.map((segment) => segment.line).join('\n') + (segments.length ? '\n' : '');
+      }
+
+      function updateOutput() {
+        const text = currentText();
+        output.value = text;
+        const bytes = new TextEncoder().encode(text).length;
+        $('counts').innerHTML = `<span>Pasos: ${segments.length} / ${MAX_STEPS}</span><span>Tamaño: ${bytes} / ${MAX_BYTES} bytes</span>`;
+        $('download').disabled = segments.length === 0 || recording || truncated;
+        $('clear').disabled = segments.length === 0 || recording;
+      }
+
+      function appendSegment(state, elapsedMs) {
+        let remaining = Math.max(1, Math.round(elapsedMs));
+        while (remaining > 0) {
+          const duration = Math.min(remaining, MAX_DURATION_MS);
+          if (segments.length >= MAX_STEPS) {
+            truncated = true;
+            return false;
+          }
+          const segment = { line: serializeSegment(state, duration) };
+          segments.push(segment);
+          if (new TextEncoder().encode(currentText()).length > MAX_BYTES) {
+            segments.pop();
+            truncated = true;
+            return false;
+          }
+          remaining -= duration;
+        }
+        updateOutput();
+        return true;
+      }
+
+      function stopRecording(reason, skipFinalSegment = false) {
+        if (!recording) return;
+        const now = performance.now();
+        if (!skipFinalSegment) appendSegment(previousState, now - segmentStart);
+        recording = false;
+        if (!relaying) stopPolling();
+        $('start').disabled = !gamepads().some((pad) => pad.index === selectedIndex);
+        $('stop').disabled = true;
+        updateOutput();
+        if (truncated) {
+          setStatus('Se alcanzó el límite de 512 pasos o 24 KB; exporta la parte grabada.', { error: true });
+          $('download').disabled = segments.length === 0;
+        } else {
+          setStatus(reason || (relaying
+            ? `Grabación detenida: ${segments.length} pasos. El relé sigue activo.`
+            : `Grabación detenida: ${segments.length} pasos.`));
+        }
+        if (!relaying) refreshGamepads();
+      }
+
+      function poll() {
+        pollScheduled = false;
+        if (!recording && !relaying) return;
+        const pad = gamepads().find((candidate) => candidate.index === selectedIndex);
+        if (!pad) {
+          if (recording) stopRecording('El mando se desconectó; se guardó lo grabado hasta ese momento.');
+          if (relaying) stopRelay(false);
+          return;
+        }
+        const nextState = readState(pad);
+        const now = performance.now();
+        if (stateSignature(nextState) !== stateSignature(previousState)) {
+          if (recording && !appendSegment(previousState, now - segmentStart)) {
+            stopRecording('', true);
+            previousState = nextState;
+            if (relaying) relayState(nextState);
+            lastRelayAt = now;
+            ensurePolling();
+            return;
+          }
+          previousState = nextState;
+          if (recording) segmentStart = now;
+          if (relaying) relayState(nextState);
+          lastRelayAt = now;
+        } else if (relaying && now - lastRelayAt >= 100) {
+          relayState(nextState);
+          lastRelayAt = now;
+        }
+        ensurePolling();
+      }
+
+      function startRecording() {
+        const pad = gamepads().find((candidate) => candidate.index === selectedIndex);
+        if (!pad) {
+          setStatus('No encuentro el mando seleccionado. Actualiza la lista.', { error: true });
+          refreshGamepads();
+          return;
+        }
+        segments = [];
+        truncated = false;
+        previousState = readState(pad);
+        segmentStart = performance.now();
+        lastRelayAt = segmentStart;
+        recording = true;
+        $('start').disabled = true;
+        $('stop').disabled = false;
+        updateOutput();
+        setStatus(relaying
+          ? 'Grabando macro; el relé sigue funcionando de forma independiente.'
+          : 'Grabando solo la macro. Conecta la Flipper en Live para jugar en la Switch.');
+        ensurePolling();
+      }
+
+      function downloadFile() {
+        const blob = new Blob([currentText()], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'macros.txt';
+        document.body.append(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      $('refresh').addEventListener('click', refreshGamepads);
+      picker.addEventListener('change', () => {
+        selectedIndex = picker.value === '' ? null : Number(picker.value);
+        $('start').disabled = !Number.isInteger(selectedIndex);
+        updateRelayButtons();
+        const pad = gamepads().find((candidate) => candidate.index === selectedIndex);
+        if (pad) setStatus(`Seleccionado: ${pad.id || 'mando'} (${pad.mapping || 'mapeo no estándar'}).`);
+        maybeStartRelay();
+      });
+      $('start').addEventListener('click', startRecording);
+      $('stop').addEventListener('click', () => stopRecording());
+      $('start-relay').addEventListener('click', startRelay);
+      $('stop-relay').addEventListener('click', stopRelay);
+      $('clear').addEventListener('click', () => {
+        segments = [];
+        truncated = false;
+        updateOutput();
+        setStatus('Grabación vaciada.');
+      });
+      $('download').addEventListener('click', downloadFile);
+      $('connect-flipper').addEventListener('click', connectFlipper);
+      window.addEventListener('gamepadconnected', refreshGamepads);
+      window.addEventListener('gamepaddisconnected', refreshGamepads);
+
+      if (!navigator.getGamepads) {
+        $('start').disabled = true;
+        setStatus('Este navegador no ofrece Gamepad API. Abre la herramienta en Chrome o Edge.', { error: true });
+      } else {
+        refreshGamepads();
+        window.setInterval(refreshGamepads, 1200);
+      }
+      updateOutput();
+    })();
+  </script>
+</body>
+</html>
