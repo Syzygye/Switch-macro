@@ -27,7 +27,7 @@ try {
     }
     if ($LASTEXITCODE -ne 0) { throw "uFBT build failed" }
 
-    $builtFap = Join-Path $ufbtHome "build\civswitch_flipper.fap"
+    $builtFap = Join-Path $ufbtHome "build\switch_macro.fap"
     $distDir = Join-Path $PSScriptRoot "dist"
     New-Item -ItemType Directory -Force -Path $distDir | Out-Null
     Copy-Item -LiteralPath $builtFap -Destination (Join-Path $distDir "SwitchMacro.fap") -Force
