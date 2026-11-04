@@ -1,6 +1,8 @@
 # Switch Macro
 
-Switch Macro convierte el Flipper Zero en un mando USB para Nintendo Switch y permite retransmitir los controles de un mando conectado al PC por Bluetooth.
+Utiliza mandos conectados al PC en Nintendo Switch y Switch 2 a través de tu Flipper Zero.
+
+Graba macros desde el propio Flipper Zero y reprodúcelas después sin PC ni mando. Emulador de mando físico, controla tu Switch con tu Flipper Zero.
 
 ## Funciones
 
